@@ -1,144 +1,200 @@
-package gotextdiff_test
+// Copyright 2019 The Go Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
+
+package diff_test
 
 import (
-	"fmt"
-	"io/ioutil"
+	"bytes"
+	"math/rand"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"reflect"
+	"strings"
 	"testing"
+	"unicode/utf8"
 
-	diff "github.com/pgavlin/gotextdiff"
-	"github.com/pgavlin/gotextdiff/difftest"
-	"github.com/pgavlin/gotextdiff/myers"
-	"github.com/pgavlin/gotextdiff/span"
-	"github.com/pgavlin/gotextdiff/text"
+	"github.com/pgavlin/diff"
+	"github.com/pgavlin/diff/difftest"
+	"github.com/pgavlin/diff/testenv"
+	"github.com/pgavlin/text"
 )
 
-func TestApplyEdits(t *testing.T) {
+func TestApply(t *testing.T) {
 	for _, tc := range difftest.TestCases {
 		t.Run(tc.Name, func(t *testing.T) {
-			t.Helper()
-			if got := diff.ApplyEdits(tc.In, tc.Edits); got != tc.Out {
-				t.Errorf("ApplyEdits edits got %q, want %q", got, tc.Out)
+			got, err := diff.Apply(tc.In, tc.Edits)
+			if err != nil {
+				t.Fatalf("Apply(Edits) failed: %v", err)
+			}
+			if got != tc.Out {
+				t.Errorf("Apply(Edits): got %q, want %q", got, tc.Out)
 			}
 			if tc.LineEdits != nil {
-				if got := diff.ApplyEdits(tc.In, tc.LineEdits); got != tc.Out {
-					t.Errorf("ApplyEdits lineEdits got %q, want %q", got, tc.Out)
+				got, err := diff.Apply(tc.In, tc.LineEdits)
+				if err != nil {
+					t.Fatalf("Apply(LineEdits) failed: %v", err)
+				}
+				if got != tc.Out {
+					t.Errorf("Apply(LineEdits): got %q, want %q", got, tc.Out)
 				}
 			}
 		})
 	}
+}
+
+func TestNEdits(t *testing.T) {
+	for _, tc := range difftest.TestCases {
+		edits := diff.Text(tc.In, tc.Out)
+		got, err := diff.Apply(tc.In, edits)
+		if err != nil {
+			t.Fatalf("Apply failed: %v", err)
+		}
+		if got != tc.Out {
+			t.Fatalf("%s: got %q wanted %q", tc.Name, got, tc.Out)
+		}
+		if len(edits) < len(tc.Edits) { // should find subline edits
+			t.Errorf("got %v, expected %v for %#v", edits, tc.Edits, tc)
+		}
+	}
+}
+
+func TestNRandom(t *testing.T) {
+	rand.Seed(1)
+	for i := 0; i < 1000; i++ {
+		a := randstr("abω", 16)
+		b := randstr("abωc", 16)
+		edits := diff.Text(a, b)
+		got, err := diff.Apply(a, edits)
+		if err != nil {
+			t.Fatalf("Apply failed: %v", err)
+		}
+		if got != b {
+			t.Fatalf("%d: got %q, wanted %q, starting with %q", i, got, b, a)
+		}
+	}
+}
+
+// $ go test -fuzz=FuzzRoundTrip ./internal/diff
+func FuzzRoundTrip(f *testing.F) {
+	f.Fuzz(func(t *testing.T, a, b string) {
+		if !utf8.ValidString(a) || !utf8.ValidString(b) {
+			return // inputs must be text
+		}
+		edits := diff.Text(a, b)
+		got, err := diff.Apply(a, edits)
+		if err != nil {
+			t.Fatalf("Apply failed: %v", err)
+		}
+		if got != b {
+			t.Fatalf("applying diff(%q, %q) gives %q; edits=%v", a, b, got, edits)
+		}
+	})
 }
 
 func TestLineEdits(t *testing.T) {
 	for _, tc := range difftest.TestCases {
 		t.Run(tc.Name, func(t *testing.T) {
-			t.Helper()
 			// if line edits not specified, it is the same as edits
 			edits := tc.LineEdits
 			if edits == nil {
 				edits = tc.Edits
 			}
-			if got := diff.LineEdits(tc.In, tc.Edits); diffEdits(got, edits) {
-				t.Errorf("LineEdits got %q, want %q", got, edits)
+			got, err := diff.LineEdits[string, text.Strings[string]](tc.In, tc.Edits)
+			if err != nil {
+				t.Fatalf("LineEdits: %v", err)
+			}
+			if !reflect.DeepEqual(got, edits) {
+				t.Errorf("LineEdits got\n%q, want\n%q\n%#v", got, edits, tc)
 			}
 		})
 	}
 }
 
-func TestUnified(t *testing.T) {
+func TestToUnified(t *testing.T) {
+	testenv.NeedsTool(t, "patch")
 	for _, tc := range difftest.TestCases {
 		t.Run(tc.Name, func(t *testing.T) {
-			t.Helper()
-			unified := fmt.Sprint(diff.ToUnified(difftest.FileA, difftest.FileB, tc.In, tc.Edits))
-			if unified != tc.Unified {
-				t.Errorf("edits got diff:\n%v\nexpected:\n%v", unified, tc.Unified)
+			unified, err := diff.ToUnified(difftest.FileA, difftest.FileB, tc.In, tc.Edits)
+			if err != nil {
+				t.Fatal(err)
 			}
-			if tc.LineEdits != nil {
-				unified := fmt.Sprint(diff.ToUnified(difftest.FileA, difftest.FileB, tc.In, tc.LineEdits))
-				if unified != tc.Unified {
-					t.Errorf("lineEdits got diff:\n%v\nexpected:\n%v", unified, tc.Unified)
-				}
+			if unified == "" {
+				return
 			}
+			orig := filepath.Join(t.TempDir(), "original")
+			err = os.WriteFile(orig, []byte(tc.In), 0644)
+			if err != nil {
+				t.Fatal(err)
+			}
+			temp := filepath.Join(t.TempDir(), "patched")
+			err = os.WriteFile(temp, []byte(tc.In), 0644)
+			if err != nil {
+				t.Fatal(err)
+			}
+			cmd := exec.Command("patch", "-p0", "-u", "-s", "-o", temp, orig)
+			cmd.Stdin = strings.NewReader(unified)
+			cmd.Stdout = new(bytes.Buffer)
+			cmd.Stderr = new(bytes.Buffer)
+			if err = cmd.Run(); err != nil {
+				t.Fatalf("%v: %q (%q) (%q)", err, cmd.String(),
+					cmd.Stderr, cmd.Stdout)
+			}
+			got, err := os.ReadFile(temp)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if string(got) != tc.Out {
+				t.Errorf("applying unified failed: got\n%q, wanted\n%q unified\n%q",
+					got, tc.Out, unified)
+			}
+
 		})
 	}
 }
 
-func diffEdits[T text.Text](got, want []diff.TextEdit[T]) bool {
-	if len(got) != len(want) {
-		return true
-	}
-	for i, w := range want {
-		g := got[i]
-		if span.Compare(w.Span, g.Span) != 0 {
-			return true
-		}
-		if w.NewText.String() != g.NewText.String() {
-			return true
-		}
-	}
-	return false
-}
+func TestRegressionOld001(t *testing.T) {
+	a := "// Copyright 2019 The Go Authors. All rights reserved.\n// Use of this source code is governed by a BSD-style\n// license that can be found in the LICENSE file.\n\npackage diff_test\n\nimport (\n\t\"fmt\"\n\t\"math/rand\"\n\t\"strings\"\n\t\"testing\"\n\n\t\"golang.org/x/tools/gopls/internal/lsp/diff\"\n\t\"github.com/pgavlin/diff/difftest\"\n\t\"golang.org/x/tools/gopls/internal/span\"\n)\n"
 
-func benchmarkDiff[T text.Text](b *testing.B, t1, t2 T) {
-	b.Run("strings", func(b *testing.B) {
-		benchmarkDiffCore(b, string(t1), string(t2))
-	})
-
-	b.Run("bytes", func(b *testing.B) {
-		benchmarkDiffCore(b, []byte(t1), []byte(t2))
-	})
-}
-
-func benchmarkDiffCore[T text.Text](b *testing.B, t1, t2 T) {
-	b.Run("myers.ComputeEdits", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
-			myers.ComputeEdits("", t1, t2)
-		}
-	})
-
-	b.Run("ApplyEdits", func(b *testing.B) {
-		edits := myers.ComputeEdits("", t1, t2)
-		b.ResetTimer()
-
-		for i := 0; i < b.N; i++ {
-			diff.ApplyEdits(t1, edits)
-		}
-	})
-}
-
-func BenchmarkDiffUnrelated(b *testing.B) {
-	s1 := "`Twas brillig, and the slithy toves\nDid gyre and gimble in the wabe:\nAll mimsy were the borogoves,\nAnd the mome raths outgrabe.\n"
-	s2 := "I am the very model of a modern major general,\nI've information vegetable, animal, and mineral,\nI know the kings of England, and I quote the fights historical,\nFrom Marathon to Waterloo, in order categorical.\n"
-
-	// Expand the text.
-	for x := 0; x < 10; x++ {
-		s1, s2 = s1+s1, s2+s2
-	}
-
-	benchmarkDiff(b, s1, s2)
-}
-
-func BenchmarkDiffJournalRegister(b *testing.B) {
-	d1, err := ioutil.ReadFile("testdata/journal-register-base.txt")
+	b := "// Copyright 2019 The Go Authors. All rights reserved.\n// Use of this source code is governed by a BSD-style\n// license that can be found in the LICENSE file.\n\npackage diff_test\n\nimport (\n\t\"fmt\"\n\t\"math/rand\"\n\t\"strings\"\n\t\"testing\"\n\n\t\"github.com/google/safehtml/template\"\n\t\"golang.org/x/tools/gopls/internal/lsp/diff\"\n\t\"github.com/pgavlin/diff/difftest\"\n\t\"golang.org/x/tools/gopls/internal/span\"\n)\n"
+	diffs := diff.Text(a, b)
+	got, err := diff.Apply(a, diffs)
 	if err != nil {
-		b.Fatalf("reading test data: %v", err)
+		t.Fatalf("Apply failed: %v", err)
 	}
-	d2, err := ioutil.ReadFile("testdata/journal-register-edit.txt")
-	if err != nil {
-		b.Fatalf("reading test data: %v", err)
+	if got != b {
+		i := 0
+		for ; i < len(a) && i < len(b) && got[i] == b[i]; i++ {
+		}
+		t.Errorf("oops %vd\n%q\n%q", diffs, got, b)
+		t.Errorf("\n%q\n%q", got[i:], b[i:])
 	}
-
-	benchmarkDiff(b, d1, d2)
 }
 
-func BenchmarkDiffGlagolitic(b *testing.B) {
-	d1, err := ioutil.ReadFile("testdata/glagolitic-base.txt")
+func TestRegressionOld002(t *testing.T) {
+	a := "n\"\n)\n"
+	b := "n\"\n\t\"golang.org/x//nnal/stack\"\n)\n"
+	diffs := diff.Text(a, b)
+	got, err := diff.Apply(a, diffs)
 	if err != nil {
-		b.Fatalf("reading test data: %v", err)
+		t.Fatalf("Apply failed: %v", err)
 	}
-	d2, err := ioutil.ReadFile("testdata/glagolitic-edit.txt")
-	if err != nil {
-		b.Fatalf("reading test data: %v", err)
+	if got != b {
+		i := 0
+		for ; i < len(a) && i < len(b) && got[i] == b[i]; i++ {
+		}
+		t.Errorf("oops %vd\n%q\n%q", diffs, got, b)
+		t.Errorf("\n%q\n%q", got[i:], b[i:])
 	}
+}
 
-	benchmarkDiff(b, d1, d2)
+// return a random string of length n made of characters from s
+func randstr(s string, n int) string {
+	src := []rune(s)
+	x := make([]rune, n)
+	for i := 0; i < n; i++ {
+		x[i] = src[rand.Intn(len(src))]
+	}
+	return string(x)
 }

@@ -6,35 +6,47 @@
 package myers
 
 import (
-	diff "github.com/pgavlin/gotextdiff"
-	"github.com/pgavlin/gotextdiff/span"
-	"github.com/pgavlin/gotextdiff/text"
+	"github.com/pgavlin/text"
+	"github.com/pgavlin/diff"
 )
 
 // Sources:
 // https://blog.jcoglan.com/2017/02/17/the-myers-diff-algorithm-part-3/
 // https://www.codeproject.com/Articles/42279/%2FArticles%2F42279%2FInvestigating-Myers-diff-algorithm-Part-1-of-2
 
-func ComputeEdits[T text.Text](uri span.URI, before, after T) []diff.TextEdit[T] {
+func ComputeEdits[T text.Text](before, after T) []diff.Edit[T] {
 	if text.UseStrings[T]() {
-		return computeEdits[T, text.Strings[T]](uri, before, after)
+		return computeEdits[T, text.Strings[T]](before, after)
 	}
-	return computeEdits[T, text.Bytes[T]](uri, before, after)
+	return computeEdits[T, text.Bytes[T]](before, after)
 }
 
-func computeEdits[T text.Text, A text.Algorithms[T]](uri span.URI, before, after T) []diff.TextEdit[T] {
-	ops := operations[T, A](splitLines(before), splitLines(after))
-	edits := make([]diff.TextEdit[T], 0, len(ops))
+func computeEdits[T text.Text, A text.Algorithms[T]](before, after T) []diff.Edit[T] {
+	var alg A
+
+	beforeLines := splitLines[T, A](before)
+	ops := operations[T, A](beforeLines, splitLines[T, A](after))
+
+	// Build a table mapping line number to offset.
+	lineOffsets := make([]int, 0, len(beforeLines)+1)
+	total := 0
+	for i := range beforeLines {
+		lineOffsets = append(lineOffsets, total)
+		total += len(beforeLines[i])
+	}
+	lineOffsets = append(lineOffsets, total) // EOF
+
+	edits := make([]diff.Edit[T], 0, len(ops))
 	for _, op := range ops {
-		s := span.New(uri, span.NewPoint(op.I1+1, 1, 0), span.NewPoint(op.I2+1, 1, 0))
+		start, end := lineOffsets[op.I1], lineOffsets[op.I2]
 		switch op.Kind {
 		case diff.Delete:
-			// Delete: unformatted[i1:i2] is deleted.
-			edits = append(edits, diff.TextEdit[T]{Span: s})
+			// Delete: before[I1:I2] is deleted.
+			edits = append(edits, diff.Edit[T]{Start: start, End: end})
 		case diff.Insert:
-			// Insert: formatted[j1:j2] is inserted at unformatted[i1:i1].
-			if op.contentLength() != 0 {
-				edits = append(edits, diff.TextEdit[T]{Span: s, NewText: diff.NewRope(op.Content...)})
+			// Insert: after[J1:J2] is inserted at before[I1:I1].
+			if content := alg.Join(op.Content, T("")); len(content) != 0 {
+				edits = append(edits, diff.Edit[T]{Start: start, End: end, New: content})
 			}
 		}
 	}
@@ -46,14 +58,6 @@ type operation[T text.Text] struct {
 	Content []T // content from b
 	I1, I2  int // indices of the line in a
 	J1      int // indices of the line in b, J2 implied by len(Content)
-}
-
-func (o *operation[T]) contentLength() int {
-	l := 0
-	for _, c := range o.Content {
-		l += len(c)
-	}
-	return l
 }
 
 // operations returns the list of operations to convert a into b, consolidating
@@ -163,11 +167,12 @@ func backtrack(trace [][]int, x, y, offset int) [][]int {
 
 // shortestEditSequence returns the shortest edit sequence that converts a into b.
 func shortestEditSequence[T text.Text, A text.Algorithms[T]](a, b []T) ([][]int, int) {
+	var alg A
+
 	M, N := len(a), len(b)
 	V := make([]int, 2*(N+M)+1)
 	offset := N + M
 	trace := make([][]int, N+M+1)
-	var alg A
 
 	// Iterate through the maximum possible length of the SES (N+M).
 	for d := 0; d <= N+M; d++ {
@@ -211,16 +216,9 @@ func shortestEditSequence[T text.Text, A text.Algorithms[T]](a, b []T) ([][]int,
 	return nil, 0
 }
 
-func splitLines[T text.Text](t T) []T {
-	var lines []T
-	if text.UseStrings[T]() {
-		var alg text.Strings[T]
-		lines = alg.SplitAfter(t, T("\n"))
-	} else {
-		var alg text.Bytes[T]
-		lines = alg.SplitAfter(t, T([]byte{'\n'}))
-	}
-
+func splitLines[T text.Text, A text.Algorithms[T]](t T) []T {
+	var alg A
+	lines := alg.SplitAfter(t, T("\n"))
 	if len(lines[len(lines)-1]) == 0 {
 		lines = lines[:len(lines)-1]
 	}

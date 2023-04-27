@@ -1,6 +1,6 @@
-# gotextdiff - unified text diffing in Go [![Go Reference](https://pkg.go.dev/badge/github.com/hexops/gotextdiff.svg)](https://pkg.go.dev/github.com/hexops/gotextdiff) <a href="https://hexops.com"><img align="right" alt="Hexops logo" src="https://raw.githubusercontent.com/hexops/media/master/readme.svg"></img></a>
+# diff - unified text diffing in Go [![Go Reference](https://pkg.go.dev/badge/github.com/pgavlin/diff.svg)](https://pkg.go.dev/github.com/pgavlin/diff)
 
-This is a copy of the Go text diffing packages that [the official Go language server gopls uses internally](https://github.com/golang/tools/tree/master/internal/lsp/diff) to generate unified diffs.
+This is a copy of the Go text diffing packages that [the official Go language server gopls uses internally](https://github.com/golang/tools/tree/master/internal/diff) to generate unified diffs.
 
 If you've previously tried to generate unified text diffs in Go (like the ones you see in Git and on GitHub), you may have found [github.com/sergi/go-diff](https://github.com/sergi/go-diff) which is a Go port of Neil Fraser's google-diff-match-patch code - however it [does not support unified diffs](https://github.com/sergi/go-diff/issues/57).
 
@@ -14,8 +14,8 @@ Import the packages:
 
 ```Go
 import (
-    "github.com/hexops/gotextdiff"
-    "github.com/hexops/gotextdiff/myers"
+    "github.com/pgavlin/diff"
+    "github.com/pgavlin/diff/myers"
 )
 ```
 
@@ -23,7 +23,7 @@ Assuming you want to diff `a.txt` and `b.txt`, whose contents are stored in `aSt
 
 ```Go
 edits := myers.ComputeEdits(span.URIFromPath("a.txt"), aString, bString)
-diff := fmt.Sprint(gotextdiff.ToUnified("a.txt", "b.txt", aString, edits))
+diff := fmt.Sprint(diff.ToUnified("a.txt", "b.txt", aString, edits))
 ```
 
 `diff` will be a string like:

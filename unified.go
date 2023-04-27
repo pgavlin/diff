@@ -2,45 +2,72 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-package gotextdiff
+package diff
 
 import (
 	"fmt"
+	"log"
+	"strings"
 
-	"github.com/pgavlin/gotextdiff/text"
+	"github.com/pgavlin/text"
 )
 
-// Unified represents a set of edits as a unified diff.
-type Unified[T Text] struct {
+// Unified returns a unified diff of the old and new texts.
+// The old and new labels are the names of the old and new files.
+// If the texts are equal, it returns the empty string.
+func Unified[T text.Text](oldLabel, newLabel string, old, new T) string {
+	edits := Text(old, new)
+	unified, err := ToUnified(oldLabel, newLabel, old, edits)
+	if err != nil {
+		// Can't happen: edits are consistent.
+		log.Fatalf("internal error in diff.Unified: %v", err)
+	}
+	return unified
+}
+
+// ToUnified applies the edits to content and returns a unified diff.
+// The old and new labels are the names of the content and result files.
+// It returns an error if the edits are inconsistent; see ApplyEdits.
+func ToUnified[T text.Text](oldLabel, newLabel string, content T, edits []Edit[T]) (string, error) {
+	u, err := toUnified(oldLabel, newLabel, content, edits)
+	if err != nil {
+		return "", err
+	}
+	return u.String(), nil
+}
+
+// unified represents a set of edits as a unified diff.
+type unified struct {
 	// From is the name of the original file.
 	From string
 	// To is the name of the modified file.
 	To string
 	// Hunks is the set of edit hunks needed to transform the file content.
-	Hunks []*Hunk[T]
+	Hunks []*hunk
 }
 
 // Hunk represents a contiguous set of line edits to apply.
-type Hunk[T Text] struct {
+type hunk struct {
 	// The line in the original source where the hunk starts.
 	FromLine int
 	// The line in the original source where the hunk finishes.
 	ToLine int
 	// The set of line based edits to apply.
-	Lines []Line[T]
+	Lines []line
 }
 
 // Line represents a single line operation to apply as part of a Hunk.
-type Line[T Text] struct {
+type line struct {
 	// Kind is the type of line this represents, deletion, insertion or copy.
 	Kind OpKind
 	// Content is the content of this line.
 	// For deletion it is the line being removed, for all others it is the line
 	// to put in the output.
-	Content T
+	Content string
 }
 
 // OpKind is used to denote the type of operation a line represents.
+// TODO(adonovan): hide this once the myers package no longer references it.
 type OpKind int
 
 const (
@@ -74,34 +101,43 @@ const (
 	gap  = edge * 2
 )
 
-// ToUnified takes a file contents and a sequence of edits, and calculates
+// toUnified takes a file contents and a sequence of edits, and calculates
 // a unified diff that represents those edits.
-func ToUnified[T Text](from, to string, content T, edits []TextEdit[T]) Unified[T] {
+func toUnified[T text.Text](fromName, toName string, content T, edits []Edit[T]) (unified, error) {
 	if text.UseStrings[T]() {
-		return toUnified[T, text.Strings[T]](from, to, content, edits)
+		return toUnifiedImpl[T, text.Strings[T]](fromName, toName, content, edits)
 	}
-	return toUnified[T, text.Bytes[T]](from, to, content, edits)
+	return toUnifiedImpl[T, text.Bytes[T]](fromName, toName, content, edits)
 }
 
-func toUnified[T Text, A text.Algorithms[T]](from, to string, content T, edits []TextEdit[T]) Unified[T] {
-	u := Unified[T]{
-		From: from,
-		To:   to,
+func toUnifiedImpl[T text.Text, A text.Algorithms[T]](fromName, toName string, content T, edits []Edit[T]) (unified, error) {
+	var alg A
+
+	u := unified{
+		From: fromName,
+		To:   toName,
 	}
 	if len(edits) == 0 {
-		return u
+		return u, nil
 	}
-	edits, partial := prepareEdits(content, edits)
-	if partial {
-		edits = lineEdits[T, A](content, edits)
+	var err error
+	edits, err = lineEdits[T, A](content, edits) // expand to whole lines
+	if err != nil {
+		return u, err
 	}
-	lines := splitLines(content)
-	var h *Hunk[T]
+	lines := splitLines[T, A](content)
+	var h *hunk
 	last := 0
 	toLine := 0
 	for _, edit := range edits {
-		start := edit.Span.Start().Line() - 1
-		end := edit.Span.End().Line() - 1
+		// Compute the zero-based line numbers of the edit start and end.
+		// TODO(adonovan): opt: compute incrementally, avoid O(n^2).
+		start := alg.Count(content[:edit.Start], T("\n"))
+		end := alg.Count(content[:edit.End], T("\n"))
+		if edit.End == len(content) && len(content) > 0 && content[len(content)-1] != '\n' {
+			end++ // EOF counts as an implicit newline
+		}
+
 		switch {
 		case h != nil && start == last:
 			//direct extension
@@ -116,7 +152,7 @@ func toUnified[T Text, A text.Algorithms[T]](from, to string, content T, edits [
 				u.Hunks = append(u.Hunks, h)
 			}
 			toLine += start - last
-			h = &Hunk[T]{
+			h = &hunk{
 				FromLine: start + 1,
 				ToLine:   toLine + 1,
 			}
@@ -127,12 +163,12 @@ func toUnified[T Text, A text.Algorithms[T]](from, to string, content T, edits [
 		}
 		last = start
 		for i := start; i < end; i++ {
-			h.Lines = append(h.Lines, Line[T]{Kind: Delete, Content: lines[i]})
+			h.Lines = append(h.Lines, line{Kind: Delete, Content: string(lines[i])})
 			last++
 		}
-		if t := edit.NewText.Text(); len(t) != 0 {
-			for _, line := range splitLines(t) {
-				h.Lines = append(h.Lines, Line[T]{Kind: Insert, Content: line})
+		if len(edit.New) != 0 {
+			for _, content := range splitLines[T, A](edit.New) {
+				h.Lines = append(h.Lines, line{Kind: Insert, Content: string(content)})
 				toLine++
 			}
 		}
@@ -142,26 +178,19 @@ func toUnified[T Text, A text.Algorithms[T]](from, to string, content T, edits [
 		addEqualLines(h, lines, last, last+edge)
 		u.Hunks = append(u.Hunks, h)
 	}
-	return u
+	return u, nil
 }
 
-func splitLines[T Text](t T) []T {
-	var lines []T
-	if text.UseStrings[T]() {
-		var alg text.Strings[T]
-		lines = alg.SplitAfter(t, T("\n"))
-	} else {
-		var alg text.Bytes[T]
-		lines = alg.SplitAfter(t, T([]byte{'\n'}))
-	}
-
+func splitLines[T text.Text, A text.Algorithms[T]](text T) []T {
+	var alg A
+	lines := alg.SplitAfter(text, T("\n"))
 	if len(lines[len(lines)-1]) == 0 {
 		lines = lines[:len(lines)-1]
 	}
 	return lines
 }
 
-func addEqualLines[T Text](h *Hunk[T], lines []T, start, end int) int {
+func addEqualLines[T text.Text](h *hunk, lines []T, start, end int) int {
 	delta := 0
 	for i := start; i < end; i++ {
 		if i < 0 {
@@ -170,30 +199,21 @@ func addEqualLines[T Text](h *Hunk[T], lines []T, start, end int) int {
 		if i >= len(lines) {
 			return delta
 		}
-		h.Lines = append(h.Lines, Line[T]{Kind: Equal, Content: lines[i]})
+		h.Lines = append(h.Lines, line{Kind: Equal, Content: string(lines[i])})
 		delta++
 	}
 	return delta
 }
 
-// Format converts a unified diff to the standard textual form for that diff.
+// String converts a unified diff to the standard textual form for that diff.
 // The output of this function can be passed to tools like patch.
-func (u Unified[T]) Format(f fmt.State, r rune) {
-	if text.UseStrings[T]() {
-		formatUnified[T, text.Strings[T]](u, f, r)
-		return
-	}
-	formatUnified[T, text.Bytes[T]](u, f, r)
-}
-
-func formatUnified[T Text, A text.Algorithms[T]](u Unified[T], f fmt.State, r rune) {
-	var alg A
-
+func (u unified) String() string {
 	if len(u.Hunks) == 0 {
-		return
+		return ""
 	}
-	fmt.Fprintf(f, "--- %s\n", u.From)
-	fmt.Fprintf(f, "+++ %s\n", u.To)
+	b := new(strings.Builder)
+	fmt.Fprintf(b, "--- %s\n", u.From)
+	fmt.Fprintf(b, "+++ %s\n", u.To)
 	for _, hunk := range u.Hunks {
 		fromCount, toCount := 0, 0
 		for _, l := range hunk.Lines {
@@ -207,30 +227,34 @@ func formatUnified[T Text, A text.Algorithms[T]](u Unified[T], f fmt.State, r ru
 				toCount++
 			}
 		}
-		fmt.Fprint(f, "@@")
+		fmt.Fprint(b, "@@")
 		if fromCount > 1 {
-			fmt.Fprintf(f, " -%d,%d", hunk.FromLine, fromCount)
+			fmt.Fprintf(b, " -%d,%d", hunk.FromLine, fromCount)
+		} else if hunk.FromLine == 1 && fromCount == 0 {
+			// Match odd GNU diff -u behavior adding to empty file.
+			fmt.Fprintf(b, " -0,0")
 		} else {
-			fmt.Fprintf(f, " -%d", hunk.FromLine)
+			fmt.Fprintf(b, " -%d", hunk.FromLine)
 		}
 		if toCount > 1 {
-			fmt.Fprintf(f, " +%d,%d", hunk.ToLine, toCount)
+			fmt.Fprintf(b, " +%d,%d", hunk.ToLine, toCount)
 		} else {
-			fmt.Fprintf(f, " +%d", hunk.ToLine)
+			fmt.Fprintf(b, " +%d", hunk.ToLine)
 		}
-		fmt.Fprint(f, " @@\n")
+		fmt.Fprint(b, " @@\n")
 		for _, l := range hunk.Lines {
 			switch l.Kind {
 			case Delete:
-				fmt.Fprintf(f, "-%s", string(l.Content))
+				fmt.Fprintf(b, "-%s", l.Content)
 			case Insert:
-				fmt.Fprintf(f, "+%s", string(l.Content))
+				fmt.Fprintf(b, "+%s", l.Content)
 			default:
-				fmt.Fprintf(f, " %s", string(l.Content))
+				fmt.Fprintf(b, " %s", l.Content)
 			}
-			if !alg.HasSuffix(l.Content, T("\n")) {
-				fmt.Fprintf(f, "\n\\ No newline at end of file\n")
+			if !strings.HasSuffix(l.Content, "\n") {
+				fmt.Fprintf(b, "\n\\ No newline at end of file\n")
 			}
 		}
 	}
+	return b.String()
 }

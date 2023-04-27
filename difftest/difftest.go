@@ -2,18 +2,23 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// package difftest supplies a set of tests that will operate on any
+// Package difftest supplies a set of tests that will operate on any
 // implementation of a diff algorithm as exposed by
-// "github.com/pgavlin/gotextdiff"
+// "github.com/pgavlin/diff"
 package difftest
 
+// There are two kinds of tests, semantic tests, and 'golden data' tests.
+// The semantic tests check that the computed diffs transform the input to
+// the output, and that 'patch' accepts the computed unified diffs.
+// The other tests just check that Edits and LineEdits haven't changed
+// unexpectedly. These fields may need to be changed when the diff algorithm
+// changes.
+
 import (
-	"fmt"
 	"testing"
 
-	diff "github.com/pgavlin/gotextdiff"
-	"github.com/pgavlin/gotextdiff/span"
-	"github.com/pgavlin/gotextdiff/text"
+	"github.com/pgavlin/text"
+	"github.com/pgavlin/diff"
 )
 
 const (
@@ -24,7 +29,7 @@ const (
 
 var TestCases = []struct {
 	Name, In, Out, Unified string
-	Edits, LineEdits       []diff.TextEdit[string]
+	Edits, LineEdits       []diff.Edit[string]
 	NoDiff                 bool
 }{{
 	Name: "empty",
@@ -43,8 +48,8 @@ var TestCases = []struct {
 -fruit
 +cheese
 `[1:],
-	Edits:     []diff.TextEdit[string]{{Span: newSpan(0, 5), NewText: diff.NewRope("cheese")}},
-	LineEdits: []diff.TextEdit[string]{{Span: newSpan(0, 6), NewText: diff.NewRope("cheese\n")}},
+	Edits:     []diff.Edit[string]{{Start: 0, End: 5, New: "cheese"}},
+	LineEdits: []diff.Edit[string]{{Start: 0, End: 6, New: "cheese\n"}},
 }, {
 	Name: "insert_rune",
 	In:   "gord\n",
@@ -54,8 +59,8 @@ var TestCases = []struct {
 -gord
 +gourd
 `[1:],
-	Edits:     []diff.TextEdit[string]{{Span: newSpan(2, 2), NewText: diff.NewRope("u")}},
-	LineEdits: []diff.TextEdit[string]{{Span: newSpan(0, 5), NewText: diff.NewRope("gourd\n")}},
+	Edits:     []diff.Edit[string]{{Start: 2, End: 2, New: "u"}},
+	LineEdits: []diff.Edit[string]{{Start: 0, End: 5, New: "gourd\n"}},
 }, {
 	Name: "delete_rune",
 	In:   "groat\n",
@@ -65,8 +70,8 @@ var TestCases = []struct {
 -groat
 +goat
 `[1:],
-	Edits:     []diff.TextEdit[string]{{Span: newSpan(1, 2), NewText: diff.NewRope("")}},
-	LineEdits: []diff.TextEdit[string]{{Span: newSpan(0, 6), NewText: diff.NewRope("goat\n")}},
+	Edits:     []diff.Edit[string]{{Start: 1, End: 2, New: ""}},
+	LineEdits: []diff.Edit[string]{{Start: 0, End: 6, New: "goat\n"}},
 }, {
 	Name: "replace_rune",
 	In:   "loud\n",
@@ -76,8 +81,8 @@ var TestCases = []struct {
 -loud
 +lord
 `[1:],
-	Edits:     []diff.TextEdit[string]{{Span: newSpan(2, 3), NewText: diff.NewRope("r")}},
-	LineEdits: []diff.TextEdit[string]{{Span: newSpan(0, 5), NewText: diff.NewRope("lord\n")}},
+	Edits:     []diff.Edit[string]{{Start: 2, End: 3, New: "r"}},
+	LineEdits: []diff.Edit[string]{{Start: 0, End: 5, New: "lord\n"}},
 }, {
 	Name: "replace_partials",
 	In:   "blanket\n",
@@ -87,11 +92,11 @@ var TestCases = []struct {
 -blanket
 +bunker
 `[1:],
-	Edits: []diff.TextEdit[string]{
-		{Span: newSpan(1, 3), NewText: diff.NewRope("u")},
-		{Span: newSpan(6, 7), NewText: diff.NewRope("r")},
+	Edits: []diff.Edit[string]{
+		{Start: 1, End: 3, New: "u"},
+		{Start: 6, End: 7, New: "r"},
 	},
-	LineEdits: []diff.TextEdit[string]{{Span: newSpan(0, 8), NewText: diff.NewRope("bunker\n")}},
+	LineEdits: []diff.Edit[string]{{Start: 0, End: 8, New: "bunker\n"}},
 }, {
 	Name: "insert_line",
 	In:   "1: one\n3: three\n",
@@ -102,7 +107,7 @@ var TestCases = []struct {
 +2: two
  3: three
 `[1:],
-	Edits: []diff.TextEdit[string]{{Span: newSpan(7, 7), NewText: diff.NewRope("2: two\n")}},
+	Edits: []diff.Edit[string]{{Start: 7, End: 7, New: "2: two\n"}},
 }, {
 	Name: "replace_no_newline",
 	In:   "A",
@@ -114,37 +119,78 @@ var TestCases = []struct {
 +B
 \ No newline at end of file
 `[1:],
-	Edits: []diff.TextEdit[string]{{Span: newSpan(0, 1), NewText: diff.NewRope("B")}},
+	Edits: []diff.Edit[string]{{Start: 0, End: 1, New: "B"}},
 }, {
-	Name: "add_end",
-	In:   "A",
-	Out:  "AB",
+	Name: "append_empty",
+	In:   "", // GNU diff -u special case: -0,0
+	Out:  "AB\nC",
 	Unified: UnifiedPrefix + `
+@@ -0,0 +1,2 @@
++AB
++C
+\ No newline at end of file
+`[1:],
+	Edits:     []diff.Edit[string]{{Start: 0, End: 0, New: "AB\nC"}},
+	LineEdits: []diff.Edit[string]{{Start: 0, End: 0, New: "AB\nC"}},
+},
+	// TODO(adonovan): fix this test: GNU diff -u prints "+1,2", Unifies prints "+1,3".
+	// 	{
+	// 		Name: "add_start",
+	// 		In:   "A",
+	// 		Out:  "B\nCA",
+	// 		Unified: UnifiedPrefix + `
+	// @@ -1 +1,2 @@
+	// -A
+	// \ No newline at end of file
+	// +B
+	// +CA
+	// \ No newline at end of file
+	// `[1:],
+	// 		Edits:     []diff.TextEdit{{Span: newSpan(0, 0), NewText: "B\nC"}},
+	// 		LineEdits: []diff.TextEdit{{Span: newSpan(0, 0), NewText: "B\nC"}},
+	// 	},
+	{
+		Name: "add_end",
+		In:   "A",
+		Out:  "AB",
+		Unified: UnifiedPrefix + `
 @@ -1 +1 @@
 -A
 \ No newline at end of file
 +AB
 \ No newline at end of file
 `[1:],
-	Edits:     []diff.TextEdit[string]{{Span: newSpan(1, 1), NewText: diff.NewRope("B")}},
-	LineEdits: []diff.TextEdit[string]{{Span: newSpan(0, 1), NewText: diff.NewRope("AB")}},
-}, {
-	Name: "add_newline",
-	In:   "A",
-	Out:  "A\n",
-	Unified: UnifiedPrefix + `
+		Edits:     []diff.Edit[string]{{Start: 1, End: 1, New: "B"}},
+		LineEdits: []diff.Edit[string]{{Start: 0, End: 1, New: "AB"}},
+	}, {
+		Name: "add_empty",
+		In:   "",
+		Out:  "AB\nC",
+		Unified: UnifiedPrefix + `
+@@ -0,0 +1,2 @@
++AB
++C
+\ No newline at end of file
+`[1:],
+		Edits:     []diff.Edit[string]{{Start: 0, End: 0, New: "AB\nC"}},
+		LineEdits: []diff.Edit[string]{{Start: 0, End: 0, New: "AB\nC"}},
+	}, {
+		Name: "add_newline",
+		In:   "A",
+		Out:  "A\n",
+		Unified: UnifiedPrefix + `
 @@ -1 +1 @@
 -A
 \ No newline at end of file
 +A
 `[1:],
-	Edits:     []diff.TextEdit[string]{{Span: newSpan(1, 1), NewText: diff.NewRope("\n")}},
-	LineEdits: []diff.TextEdit[string]{{Span: newSpan(0, 1), NewText: diff.NewRope("A\n")}},
-}, {
-	Name: "delete_front",
-	In:   "A\nB\nC\nA\nB\nB\nA\n",
-	Out:  "C\nB\nA\nB\nA\nC\n",
-	Unified: UnifiedPrefix + `
+		Edits:     []diff.Edit[string]{{Start: 1, End: 1, New: "\n"}},
+		LineEdits: []diff.Edit[string]{{Start: 0, End: 1, New: "A\n"}},
+	}, {
+		Name: "delete_front",
+		In:   "A\nB\nC\nA\nB\nB\nA\n",
+		Out:  "C\nB\nA\nB\nA\nC\n",
+		Unified: UnifiedPrefix + `
 @@ -1,7 +1,6 @@
 -A
 -B
@@ -156,15 +202,20 @@ var TestCases = []struct {
  A
 +C
 `[1:],
-	Edits: []diff.TextEdit[string]{
-		{Span: newSpan(0, 4), NewText: diff.NewRope("")},
-		{Span: newSpan(6, 6), NewText: diff.NewRope("B\n")},
-		{Span: newSpan(10, 12), NewText: diff.NewRope("")},
-		{Span: newSpan(14, 14), NewText: diff.NewRope("C\n")},
-	},
-	NoDiff: true, // diff algorithm produces different delete/insert pattern
-},
-	{
+		NoDiff: true, // unified diff is different but valid
+		Edits: []diff.Edit[string]{
+			{Start: 0, End: 4, New: ""},
+			{Start: 6, End: 6, New: "B\n"},
+			{Start: 10, End: 12, New: ""},
+			{Start: 14, End: 14, New: "C\n"},
+		},
+		LineEdits: []diff.Edit[string]{
+			{Start: 0, End: 6, New: "C\n"},
+			{Start: 6, End: 8, New: "B\nA\n"},
+			{Start: 10, End: 14, New: "A\n"},
+			{Start: 14, End: 14, New: "C\n"},
+		},
+	}, {
 		Name: "replace_last_line",
 		In:   "A\nB\n",
 		Out:  "A\nC\n\n",
@@ -175,8 +226,8 @@ var TestCases = []struct {
 +C
 +
 `[1:],
-		Edits:     []diff.TextEdit[string]{{Span: newSpan(2, 3), NewText: diff.NewRope("C\n")}},
-		LineEdits: []diff.TextEdit[string]{{Span: newSpan(2, 4), NewText: diff.NewRope("C\n\n")}},
+		Edits:     []diff.Edit[string]{{Start: 2, End: 3, New: "C\n"}},
+		LineEdits: []diff.Edit[string]{{Start: 2, End: 4, New: "C\n\n"}},
 	},
 	{
 		Name: "multiple_replace",
@@ -196,46 +247,44 @@ var TestCases = []struct {
 -G
 +K
 `[1:],
-		Edits: []diff.TextEdit[string]{
-			{Span: newSpan(2, 8), NewText: diff.NewRope("H\nI\nJ\n")},
-			{Span: newSpan(12, 14), NewText: diff.NewRope("K\n")},
+		Edits: []diff.Edit[string]{
+			{Start: 2, End: 8, New: "H\nI\nJ\n"},
+			{Start: 12, End: 14, New: "K\n"},
 		},
 		NoDiff: true, // diff algorithm produces different delete/insert pattern
 	},
+	{
+		Name:  "extra_newline",
+		In:    "\nA\n",
+		Out:   "A\n",
+		Edits: []diff.Edit[string]{{Start: 0, End: 1, New: ""}},
+		Unified: UnifiedPrefix + `@@ -1,2 +1 @@
+-
+ A
+`,
+	},
 }
 
-func init() {
-	// expand all the spans to full versions
-	// we need them all to have their line number and column
-	for _, tc := range TestCases {
-		c := span.NewContentConverter("", []byte(tc.In))
-		for i := range tc.Edits {
-			tc.Edits[i].Span, _ = tc.Edits[i].Span.WithAll(c)
-		}
-		for i := range tc.LineEdits {
-			tc.LineEdits[i].Span, _ = tc.LineEdits[i].Span.WithAll(c)
-		}
-	}
-}
-
-func DiffTest[T text.Text](t *testing.T, compute diff.ComputeEdits[T]) {
-	t.Helper()
+func DiffTest[T text.Text](t *testing.T, compute func(before, after T) []diff.Edit[T]) {
 	for _, test := range TestCases {
 		t.Run(test.Name, func(t *testing.T) {
-			t.Helper()
-			edits := compute(span.URIFromPath("/"+test.Name), T(test.In), T(test.Out))
-			got := string(diff.ApplyEdits(T(test.In), edits))
-			unified := fmt.Sprint(diff.ToUnified(FileA, FileB, T(test.In), edits))
-			if got != string(test.Out) {
-				t.Errorf("got patched:\n%v\nfrom diff:\n%v\nexpected:\n%v", got, unified, string(test.Out))
+			edits := compute(T(test.In), T(test.Out))
+			got, err := diff.Apply(T(test.In), edits)
+			if err != nil {
+				t.Fatalf("Apply failed: %v", err)
 			}
-			if !test.NoDiff && unified != string(test.Unified) {
-				t.Errorf("got diff:\n%v\nexpected:\n%v", unified, string(test.Unified))
+			unified, err := diff.ToUnified(FileA, FileB, T(test.In), edits)
+			if err != nil {
+				t.Fatalf("ToUnified: %v", err)
+			}
+			if string(got) != test.Out {
+				t.Errorf("Apply: got patched:\n%v\nfrom diff:\n%v\nexpected:\n%v",
+					string(got), unified, test.Out)
+			}
+			if !test.NoDiff && unified != test.Unified {
+				t.Errorf("Unified: got diff:\n%q\nexpected:\n%q diffs:%v",
+					unified, test.Unified, edits)
 			}
 		})
 	}
-}
-
-func newSpan(start, end int) span.Span {
-	return span.New("", span.NewPoint(0, 0, start), span.NewPoint(0, 0, end))
 }

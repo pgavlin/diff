@@ -2,9 +2,9 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// package difftest_test supplies a set of tests that will operate on any
+// Package difftest supplies a set of tests that will operate on any
 // implementation of a diff algorithm as exposed by
-// "github.com/pgavlin/gotextdiff"
+// "github.com/pgavlin/diff"
 package difftest_test
 
 import (
@@ -15,16 +15,14 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pgavlin/gotextdiff/difftest"
-	"github.com/pgavlin/gotextdiff/testenv"
-	"github.com/pgavlin/gotextdiff/text"
+	"github.com/pgavlin/diff/difftest"
+	"github.com/pgavlin/diff/testenv"
 )
 
 func TestVerifyUnified(t *testing.T) {
 	testenv.NeedsTool(t, "diff")
 	for _, test := range difftest.TestCases {
 		t.Run(test.Name, func(t *testing.T) {
-			t.Helper()
 			if test.NoDiff {
 				t.Skip("diff tool produces expected different results")
 			}
@@ -36,13 +34,13 @@ func TestVerifyUnified(t *testing.T) {
 				diff = difftest.UnifiedPrefix + diff
 			}
 			if diff != test.Unified {
-				t.Errorf("unified:\n%q\ndiff -u:\n%q", test.Unified, diff)
+				t.Errorf("unified:\n%s\ndiff -u:\n%s", test.Unified, diff)
 			}
 		})
 	}
 }
 
-func getDiffOutput[T text.Text](a, b T) (string, error) {
+func getDiffOutput(a, b string) (string, error) {
 	fileA, err := ioutil.TempFile("", "myers.in")
 	if err != nil {
 		return "", err
