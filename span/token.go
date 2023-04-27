@@ -6,8 +6,12 @@ package span
 
 import (
 	"fmt"
-	"go/token"
+
+	"github.com/pgavlin/gotextdiff/text"
+	"github.com/pgavlin/gotextdiff/token"
 )
+
+type Text = text.Text
 
 // Range represents a source code range in token.Pos form.
 // It also carries the FileSet that produced the positions, so that it is
@@ -49,10 +53,10 @@ func NewTokenConverter(fset *token.FileSet, f *token.File) *TokenConverter {
 
 // NewContentConverter returns an implementation of Converter for the
 // given file content.
-func NewContentConverter(filename string, content []byte) *TokenConverter {
+func NewContentConverter[T Text](filename string, content T) *TokenConverter {
 	fset := token.NewFileSet()
 	f := fset.AddFile(filename, -1, len(content))
-	f.SetLinesForContent(content)
+	token.SetLinesForContent(f, content)
 	return NewTokenConverter(fset, f)
 }
 

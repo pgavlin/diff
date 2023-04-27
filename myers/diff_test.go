@@ -7,10 +7,10 @@ package myers_test
 import (
 	"testing"
 
-	"github.com/hexops/gotextdiff/difftest"
-	"github.com/hexops/gotextdiff/myers"
+	"github.com/pgavlin/gotextdiff/difftest"
+	"github.com/pgavlin/gotextdiff/myers"
 )
 
 func TestDiff(t *testing.T) {
-	difftest.DiffTest(t, myers.ComputeEdits)
+	difftest.DiffTest(t, myers.ComputeEdits[string])
 }

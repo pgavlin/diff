@@ -9,7 +9,7 @@ package span_test
 import (
 	"testing"
 
-	"github.com/hexops/gotextdiff/span"
+	"github.com/pgavlin/gotextdiff/span"
 )
 
 // TestURI tests the conversion between URIs and filenames. The test cases

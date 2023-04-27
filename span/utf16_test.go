@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hexops/gotextdiff/span"
+	"github.com/pgavlin/gotextdiff/span"
 )
 
 // The funny character below is 4 bytes long in UTF-8; two UTF-16 code points

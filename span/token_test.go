@@ -6,11 +6,11 @@ package span_test
 
 import (
 	"fmt"
-	"go/token"
 	"path"
 	"testing"
 
-	"github.com/hexops/gotextdiff/span"
+	"github.com/pgavlin/gotextdiff/span"
+	"github.com/pgavlin/gotextdiff/token"
 )
 
 var testdata = []struct {
@@ -43,7 +43,7 @@ func TestToken(t *testing.T) {
 	files := map[span.URI]*token.File{}
 	for _, f := range testdata {
 		file := fset.AddFile(f.uri, -1, len(f.content))
-		file.SetLinesForContent(f.content)
+		token.SetLinesForContent(file, f.content)
 		files[span.URIFromPath(f.uri)] = file
 	}
 	for _, test := range tokenTests {

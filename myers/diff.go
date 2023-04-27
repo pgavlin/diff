@@ -6,58 +6,72 @@
 package myers
 
 import (
-	"strings"
-
-	diff "github.com/hexops/gotextdiff"
-	"github.com/hexops/gotextdiff/span"
+	diff "github.com/pgavlin/gotextdiff"
+	"github.com/pgavlin/gotextdiff/span"
+	"github.com/pgavlin/gotextdiff/text"
 )
 
 // Sources:
 // https://blog.jcoglan.com/2017/02/17/the-myers-diff-algorithm-part-3/
 // https://www.codeproject.com/Articles/42279/%2FArticles%2F42279%2FInvestigating-Myers-diff-algorithm-Part-1-of-2
 
-func ComputeEdits(uri span.URI, before, after string) []diff.TextEdit {
-	ops := operations(splitLines(before), splitLines(after))
-	edits := make([]diff.TextEdit, 0, len(ops))
+func ComputeEdits[T text.Text](uri span.URI, before, after T) []diff.TextEdit[T] {
+	if text.UseStrings[T]() {
+		return computeEdits[T, text.Strings[T]](uri, before, after)
+	}
+	return computeEdits[T, text.Bytes[T]](uri, before, after)
+}
+
+func computeEdits[T text.Text, A text.Algorithms[T]](uri span.URI, before, after T) []diff.TextEdit[T] {
+	ops := operations[T, A](splitLines(before), splitLines(after))
+	edits := make([]diff.TextEdit[T], 0, len(ops))
 	for _, op := range ops {
 		s := span.New(uri, span.NewPoint(op.I1+1, 1, 0), span.NewPoint(op.I2+1, 1, 0))
 		switch op.Kind {
 		case diff.Delete:
 			// Delete: unformatted[i1:i2] is deleted.
-			edits = append(edits, diff.TextEdit{Span: s})
+			edits = append(edits, diff.TextEdit[T]{Span: s})
 		case diff.Insert:
 			// Insert: formatted[j1:j2] is inserted at unformatted[i1:i1].
-			if content := strings.Join(op.Content, ""); content != "" {
-				edits = append(edits, diff.TextEdit{Span: s, NewText: content})
+			if op.contentLength() != 0 {
+				edits = append(edits, diff.TextEdit[T]{Span: s, NewText: diff.NewRope(op.Content...)})
 			}
 		}
 	}
 	return edits
 }
 
-type operation struct {
+type operation[T text.Text] struct {
 	Kind    diff.OpKind
-	Content []string // content from b
-	I1, I2  int      // indices of the line in a
-	J1      int      // indices of the line in b, J2 implied by len(Content)
+	Content []T // content from b
+	I1, I2  int // indices of the line in a
+	J1      int // indices of the line in b, J2 implied by len(Content)
+}
+
+func (o *operation[T]) contentLength() int {
+	l := 0
+	for _, c := range o.Content {
+		l += len(c)
+	}
+	return l
 }
 
 // operations returns the list of operations to convert a into b, consolidating
 // operations for multiple lines and not including equal lines.
-func operations(a, b []string) []*operation {
+func operations[T text.Text, A text.Algorithms[T]](a, b []T) []*operation[T] {
 	if len(a) == 0 && len(b) == 0 {
 		return nil
 	}
 
-	trace, offset := shortestEditSequence(a, b)
+	trace, offset := shortestEditSequence[T, A](a, b)
 	snakes := backtrack(trace, len(a), len(b), offset)
 
 	M, N := len(a), len(b)
 
 	var i int
-	solution := make([]*operation, len(a)+len(b))
+	solution := make([]*operation[T], len(a)+len(b))
 
-	add := func(op *operation, i2, j2 int) {
+	add := func(op *operation[T], i2, j2 int) {
 		if op == nil {
 			return
 		}
@@ -73,11 +87,11 @@ func operations(a, b []string) []*operation {
 		if len(snake) < 2 {
 			continue
 		}
-		var op *operation
+		var op *operation[T]
 		// delete (horizontal)
 		for snake[0]-snake[1] > x-y {
 			if op == nil {
-				op = &operation{
+				op = &operation[T]{
 					Kind: diff.Delete,
 					I1:   x,
 					J1:   y,
@@ -93,7 +107,7 @@ func operations(a, b []string) []*operation {
 		// insert (vertical)
 		for snake[0]-snake[1] < x-y {
 			if op == nil {
-				op = &operation{
+				op = &operation[T]{
 					Kind: diff.Insert,
 					I1:   x,
 					J1:   y,
@@ -148,11 +162,12 @@ func backtrack(trace [][]int, x, y, offset int) [][]int {
 }
 
 // shortestEditSequence returns the shortest edit sequence that converts a into b.
-func shortestEditSequence(a, b []string) ([][]int, int) {
+func shortestEditSequence[T text.Text, A text.Algorithms[T]](a, b []T) ([][]int, int) {
 	M, N := len(a), len(b)
 	V := make([]int, 2*(N+M)+1)
 	offset := N + M
 	trace := make([][]int, N+M+1)
+	var alg A
 
 	// Iterate through the maximum possible length of the SES (N+M).
 	for d := 0; d <= N+M; d++ {
@@ -173,7 +188,7 @@ func shortestEditSequence(a, b []string) ([][]int, int) {
 			y := x - k
 
 			// Diagonal moves while we have equal contents.
-			for x < M && y < N && a[x] == b[y] {
+			for x < M && y < N && alg.Compare(a[x], b[y]) == 0 {
 				x++
 				y++
 			}
@@ -196,9 +211,17 @@ func shortestEditSequence(a, b []string) ([][]int, int) {
 	return nil, 0
 }
 
-func splitLines(text string) []string {
-	lines := strings.SplitAfter(text, "\n")
-	if lines[len(lines)-1] == "" {
+func splitLines[T text.Text](t T) []T {
+	var lines []T
+	if text.UseStrings[T]() {
+		var alg text.Strings[T]
+		lines = alg.SplitAfter(t, T("\n"))
+	} else {
+		var alg text.Bytes[T]
+		lines = alg.SplitAfter(t, T([]byte{'\n'}))
+	}
+
+	if len(lines[len(lines)-1]) == 0 {
 		lines = lines[:len(lines)-1]
 	}
 	return lines

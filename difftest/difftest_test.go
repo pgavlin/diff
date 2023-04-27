@@ -4,7 +4,7 @@
 
 // package difftest_test supplies a set of tests that will operate on any
 // implementation of a diff algorithm as exposed by
-// "github.com/hexops/gotextdiff"
+// "github.com/pgavlin/gotextdiff"
 package difftest_test
 
 import (
@@ -15,8 +15,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hexops/gotextdiff/difftest"
-	"github.com/hexops/gotextdiff/testenv"
+	"github.com/pgavlin/gotextdiff/difftest"
+	"github.com/pgavlin/gotextdiff/testenv"
+	"github.com/pgavlin/gotextdiff/text"
 )
 
 func TestVerifyUnified(t *testing.T) {
@@ -41,7 +42,7 @@ func TestVerifyUnified(t *testing.T) {
 	}
 }
 
-func getDiffOutput(a, b string) (string, error) {
+func getDiffOutput[T text.Text](a, b T) (string, error) {
 	fileA, err := ioutil.TempFile("", "myers.in")
 	if err != nil {
 		return "", err

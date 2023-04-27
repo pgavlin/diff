@@ -2,11 +2,14 @@ package gotextdiff_test
 
 import (
 	"fmt"
+	"io/ioutil"
 	"testing"
 
-	diff "github.com/hexops/gotextdiff"
-	"github.com/hexops/gotextdiff/difftest"
-	"github.com/hexops/gotextdiff/span"
+	diff "github.com/pgavlin/gotextdiff"
+	"github.com/pgavlin/gotextdiff/difftest"
+	"github.com/pgavlin/gotextdiff/myers"
+	"github.com/pgavlin/gotextdiff/span"
+	"github.com/pgavlin/gotextdiff/text"
 )
 
 func TestApplyEdits(t *testing.T) {
@@ -59,7 +62,7 @@ func TestUnified(t *testing.T) {
 	}
 }
 
-func diffEdits(got, want []diff.TextEdit) bool {
+func diffEdits[T text.Text](got, want []diff.TextEdit[T]) bool {
 	if len(got) != len(want) {
 		return true
 	}
@@ -68,9 +71,74 @@ func diffEdits(got, want []diff.TextEdit) bool {
 		if span.Compare(w.Span, g.Span) != 0 {
 			return true
 		}
-		if w.NewText != g.NewText {
+		if w.NewText.String() != g.NewText.String() {
 			return true
 		}
 	}
 	return false
+}
+
+func benchmarkDiff[T text.Text](b *testing.B, t1, t2 T) {
+	b.Run("strings", func(b *testing.B) {
+		benchmarkDiffCore(b, string(t1), string(t2))
+	})
+
+	b.Run("bytes", func(b *testing.B) {
+		benchmarkDiffCore(b, []byte(t1), []byte(t2))
+	})
+}
+
+func benchmarkDiffCore[T text.Text](b *testing.B, t1, t2 T) {
+	b.Run("myers.ComputeEdits", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			myers.ComputeEdits("", t1, t2)
+		}
+	})
+
+	b.Run("ApplyEdits", func(b *testing.B) {
+		edits := myers.ComputeEdits("", t1, t2)
+		b.ResetTimer()
+
+		for i := 0; i < b.N; i++ {
+			diff.ApplyEdits(t1, edits)
+		}
+	})
+}
+
+func BenchmarkDiffUnrelated(b *testing.B) {
+	s1 := "`Twas brillig, and the slithy toves\nDid gyre and gimble in the wabe:\nAll mimsy were the borogoves,\nAnd the mome raths outgrabe.\n"
+	s2 := "I am the very model of a modern major general,\nI've information vegetable, animal, and mineral,\nI know the kings of England, and I quote the fights historical,\nFrom Marathon to Waterloo, in order categorical.\n"
+
+	// Expand the text.
+	for x := 0; x < 10; x++ {
+		s1, s2 = s1+s1, s2+s2
+	}
+
+	benchmarkDiff(b, s1, s2)
+}
+
+func BenchmarkDiffJournalRegister(b *testing.B) {
+	d1, err := ioutil.ReadFile("testdata/journal-register-base.txt")
+	if err != nil {
+		b.Fatalf("reading test data: %v", err)
+	}
+	d2, err := ioutil.ReadFile("testdata/journal-register-edit.txt")
+	if err != nil {
+		b.Fatalf("reading test data: %v", err)
+	}
+
+	benchmarkDiff(b, d1, d2)
+}
+
+func BenchmarkDiffGlagolitic(b *testing.B) {
+	d1, err := ioutil.ReadFile("testdata/glagolitic-base.txt")
+	if err != nil {
+		b.Fatalf("reading test data: %v", err)
+	}
+	d2, err := ioutil.ReadFile("testdata/glagolitic-edit.txt")
+	if err != nil {
+		b.Fatalf("reading test data: %v", err)
+	}
+
+	benchmarkDiff(b, d1, d2)
 }

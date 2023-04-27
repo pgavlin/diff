@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hexops/gotextdiff/span"
+	"github.com/pgavlin/gotextdiff/span"
 )
 
 var (
