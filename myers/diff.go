@@ -14,7 +14,7 @@ import (
 // https://blog.jcoglan.com/2017/02/17/the-myers-diff-algorithm-part-3/
 // https://www.codeproject.com/Articles/42279/%2FArticles%2F42279%2FInvestigating-Myers-diff-algorithm-Part-1-of-2
 
-func ComputeEdits[S text.String](before, after S) []diff.Edit[S] {
+func ComputeEdits[S1, S2 text.String](before S1, after S2) []diff.Edit[S2] {
 	beforeLines := splitLines(before)
 	ops := operations(beforeLines, splitLines(after))
 
@@ -27,17 +27,17 @@ func ComputeEdits[S text.String](before, after S) []diff.Edit[S] {
 	}
 	lineOffsets = append(lineOffsets, total) // EOF
 
-	edits := make([]diff.Edit[S], 0, len(ops))
+	edits := make([]diff.Edit[S2], 0, len(ops))
 	for _, op := range ops {
 		start, end := lineOffsets[op.I1], lineOffsets[op.I2]
 		switch op.Kind {
 		case diff.Delete:
 			// Delete: before[I1:I2] is deleted.
-			edits = append(edits, diff.Edit[S]{Start: start, End: end})
+			edits = append(edits, diff.Edit[S2]{Start: start, End: end})
 		case diff.Insert:
 			// Insert: after[J1:J2] is inserted at before[I1:I1].
 			if content := text.Join(op.Content, ""); len(content) != 0 {
-				edits = append(edits, diff.Edit[S]{Start: start, End: end, New: content})
+				edits = append(edits, diff.Edit[S2]{Start: start, End: end, New: content})
 			}
 		}
 	}
@@ -53,7 +53,7 @@ type operation[S text.String] struct {
 
 // operations returns the list of operations to convert a into b, consolidating
 // operations for multiple lines and not including equal lines.
-func operations[S text.String](a, b []S) []*operation[S] {
+func operations[S1, S2 text.String](a []S1, b []S2) []*operation[S2] {
 	if len(a) == 0 && len(b) == 0 {
 		return nil
 	}
@@ -64,9 +64,9 @@ func operations[S text.String](a, b []S) []*operation[S] {
 	M, N := len(a), len(b)
 
 	var i int
-	solution := make([]*operation[S], len(a)+len(b))
+	solution := make([]*operation[S2], len(a)+len(b))
 
-	add := func(op *operation[S], i2, j2 int) {
+	add := func(op *operation[S2], i2, j2 int) {
 		if op == nil {
 			return
 		}
@@ -82,11 +82,11 @@ func operations[S text.String](a, b []S) []*operation[S] {
 		if len(snake) < 2 {
 			continue
 		}
-		var op *operation[S]
+		var op *operation[S2]
 		// delete (horizontal)
 		for snake[0]-snake[1] > x-y {
 			if op == nil {
-				op = &operation[S]{
+				op = &operation[S2]{
 					Kind: diff.Delete,
 					I1:   x,
 					J1:   y,
@@ -102,7 +102,7 @@ func operations[S text.String](a, b []S) []*operation[S] {
 		// insert (vertical)
 		for snake[0]-snake[1] < x-y {
 			if op == nil {
-				op = &operation[S]{
+				op = &operation[S2]{
 					Kind: diff.Insert,
 					I1:   x,
 					J1:   y,
@@ -157,7 +157,7 @@ func backtrack(trace [][]int, x, y, offset int) [][]int {
 }
 
 // shortestEditSequence returns the shortest edit sequence that converts a into b.
-func shortestEditSequence[S text.String](a, b []S) ([][]int, int) {
+func shortestEditSequence[S1, S2 text.String](a []S1, b []S2) ([][]int, int) {
 	M, N := len(a), len(b)
 	V := make([]int, 2*(N+M)+1)
 	offset := N + M

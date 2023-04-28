@@ -12,5 +12,5 @@ import (
 )
 
 func TestDiff(t *testing.T) {
-	difftest.DiffTest(t, myers.ComputeEdits[string])
+	difftest.DiffTest(t, myers.ComputeEdits[string, string])
 }
