@@ -16,19 +16,28 @@ import (
 // The resulting edits respect rune boundaries.
 func Text[T text.Text](before, after T) []Edit[T] {
 	if text.UseStrings[T]() {
-		return diffText[T, text.Strings[T]](before, after)
+		return diffText[T, text.Strings[T]](before, after, false)
 	}
-	return diffText[T, text.Bytes[T]](before, after)
+	return diffText[T, text.Bytes[T]](before, after, false)
 }
 
-func diffText[T text.Text, A text.Algorithms[T]](before, after T) []Edit[T] {
+// Binary computes the differences between two texts. The texts are treated as
+// binary data. The resulting edits do not respect rune boundaries.
+func Binary[T text.Text](before, after T) []Edit[T] {
+	if text.UseStrings[T]() {
+		return diffText[T, text.Strings[T]](before, after, true)
+	}
+	return diffText[T, text.Bytes[T]](before, after, true)
+}
+
+func diffText[T text.Text, A text.Algorithms[T]](before, after T, binary bool) []Edit[T] {
 	var alg A
 
 	if alg.Compare(before, after) == 0 {
 		return nil // common case
 	}
 
-	if isASCII(before) && isASCII(after) {
+	if binary || isASCII(before) && isASCII(after) {
 		return diffASCII(before, after)
 	}
 	return diffRunes[T, A](alg.ToRunes(before), alg.ToRunes(after))

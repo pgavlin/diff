@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/pgavlin/diff"
-	"github.com/pgavlin/diff/lcs"
 	"github.com/pgavlin/diff/myers"
 	"github.com/pgavlin/text"
 )
@@ -61,10 +60,17 @@ func benchmarkDiffCore[T text.Text](b *testing.B, t1, t2 T) {
 	})
 
 	b.Run("lcs", func(b *testing.B) {
-		b.Run("DiffText", func(b *testing.B) {
+		b.Run("Text", func(b *testing.B) {
 			b.ReportMetric(0, "bytes")
 			for i := 0; i < b.N; i++ {
-				lcs.DiffText(t1, t2)
+				diff.Text(t1, t2)
+			}
+		})
+
+		b.Run("Binary", func(b *testing.B) {
+			b.ReportMetric(0, "bytes")
+			for i := 0; i < b.N; i++ {
+				diff.Binary(t1, t2)
 			}
 		})
 
