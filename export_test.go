@@ -8,6 +8,6 @@ import "github.com/pgavlin/text"
 
 // This file exports some private declarations to tests.
 
-func LineEdits[T text.Text, A text.Algorithms[T]](src T, edits []Edit[T]) ([]Edit[T], error) {
-	return lineEdits[T, A](src, edits)
+func LineEdits[T text.String](src T, edits []Edit[T]) ([]Edit[T], error) {
+	return lineEdits[T](src, edits)
 }

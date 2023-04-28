@@ -6,26 +6,17 @@
 package myers
 
 import (
-	"github.com/pgavlin/text"
 	"github.com/pgavlin/diff"
+	"github.com/pgavlin/text"
 )
 
 // Sources:
 // https://blog.jcoglan.com/2017/02/17/the-myers-diff-algorithm-part-3/
 // https://www.codeproject.com/Articles/42279/%2FArticles%2F42279%2FInvestigating-Myers-diff-algorithm-Part-1-of-2
 
-func ComputeEdits[T text.Text](before, after T) []diff.Edit[T] {
-	if text.UseStrings[T]() {
-		return computeEdits[T, text.Strings[T]](before, after)
-	}
-	return computeEdits[T, text.Bytes[T]](before, after)
-}
-
-func computeEdits[T text.Text, A text.Algorithms[T]](before, after T) []diff.Edit[T] {
-	var alg A
-
-	beforeLines := splitLines[T, A](before)
-	ops := operations[T, A](beforeLines, splitLines[T, A](after))
+func ComputeEdits[T text.String](before, after T) []diff.Edit[T] {
+	beforeLines := splitLines(before)
+	ops := operations(beforeLines, splitLines(after))
 
 	// Build a table mapping line number to offset.
 	lineOffsets := make([]int, 0, len(beforeLines)+1)
@@ -45,7 +36,7 @@ func computeEdits[T text.Text, A text.Algorithms[T]](before, after T) []diff.Edi
 			edits = append(edits, diff.Edit[T]{Start: start, End: end})
 		case diff.Insert:
 			// Insert: after[J1:J2] is inserted at before[I1:I1].
-			if content := alg.Join(op.Content, T("")); len(content) != 0 {
+			if content := text.Join(op.Content, ""); len(content) != 0 {
 				edits = append(edits, diff.Edit[T]{Start: start, End: end, New: content})
 			}
 		}
@@ -53,7 +44,7 @@ func computeEdits[T text.Text, A text.Algorithms[T]](before, after T) []diff.Edi
 	return edits
 }
 
-type operation[T text.Text] struct {
+type operation[T text.String] struct {
 	Kind    diff.OpKind
 	Content []T // content from b
 	I1, I2  int // indices of the line in a
@@ -62,12 +53,12 @@ type operation[T text.Text] struct {
 
 // operations returns the list of operations to convert a into b, consolidating
 // operations for multiple lines and not including equal lines.
-func operations[T text.Text, A text.Algorithms[T]](a, b []T) []*operation[T] {
+func operations[T text.String](a, b []T) []*operation[T] {
 	if len(a) == 0 && len(b) == 0 {
 		return nil
 	}
 
-	trace, offset := shortestEditSequence[T, A](a, b)
+	trace, offset := shortestEditSequence(a, b)
 	snakes := backtrack(trace, len(a), len(b), offset)
 
 	M, N := len(a), len(b)
@@ -166,9 +157,7 @@ func backtrack(trace [][]int, x, y, offset int) [][]int {
 }
 
 // shortestEditSequence returns the shortest edit sequence that converts a into b.
-func shortestEditSequence[T text.Text, A text.Algorithms[T]](a, b []T) ([][]int, int) {
-	var alg A
-
+func shortestEditSequence[T text.String](a, b []T) ([][]int, int) {
 	M, N := len(a), len(b)
 	V := make([]int, 2*(N+M)+1)
 	offset := N + M
@@ -193,7 +182,7 @@ func shortestEditSequence[T text.Text, A text.Algorithms[T]](a, b []T) ([][]int,
 			y := x - k
 
 			// Diagonal moves while we have equal contents.
-			for x < M && y < N && alg.Compare(a[x], b[y]) == 0 {
+			for x < M && y < N && text.Compare(a[x], b[y]) == 0 {
 				x++
 				y++
 			}
@@ -216,9 +205,8 @@ func shortestEditSequence[T text.Text, A text.Algorithms[T]](a, b []T) ([][]int,
 	return nil, 0
 }
 
-func splitLines[T text.Text, A text.Algorithms[T]](t T) []T {
-	var alg A
-	lines := alg.SplitAfter(t, T("\n"))
+func splitLines[T text.String](t T) []T {
+	lines := text.SplitAfter(t, "\n")
 	if len(lines[len(lines)-1]) == 0 {
 		lines = lines[:len(lines)-1]
 	}

@@ -18,7 +18,6 @@ import (
 	"github.com/pgavlin/diff"
 	"github.com/pgavlin/diff/difftest"
 	"github.com/pgavlin/diff/testenv"
-	"github.com/pgavlin/text"
 )
 
 func TestApply(t *testing.T) {
@@ -101,7 +100,7 @@ func TestLineEdits(t *testing.T) {
 			if edits == nil {
 				edits = tc.Edits
 			}
-			got, err := diff.LineEdits[string, text.Strings[string]](tc.In, tc.Edits)
+			got, err := diff.LineEdits(tc.In, tc.Edits)
 			if err != nil {
 				t.Fatalf("LineEdits: %v", err)
 			}

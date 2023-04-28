@@ -14,36 +14,28 @@ import (
 
 // Text computes the differences between two texts.
 // The resulting edits respect rune boundaries.
-func Text[T text.Text](before, after T) []Edit[T] {
-	if text.UseStrings[T]() {
-		return diffText[T, text.Strings[T]](before, after, false)
-	}
-	return diffText[T, text.Bytes[T]](before, after, false)
+func Text[T text.String](before, after T) []Edit[T] {
+	return diffText(before, after, false)
 }
 
 // Binary computes the differences between two texts. The texts are treated as
 // binary data. The resulting edits do not respect rune boundaries.
-func Binary[T text.Text](before, after T) []Edit[T] {
-	if text.UseStrings[T]() {
-		return diffText[T, text.Strings[T]](before, after, true)
-	}
-	return diffText[T, text.Bytes[T]](before, after, true)
+func Binary[T text.String](before, after T) []Edit[T] {
+	return diffText(before, after, true)
 }
 
-func diffText[T text.Text, A text.Algorithms[T]](before, after T, binary bool) []Edit[T] {
-	var alg A
-
-	if alg.Compare(before, after) == 0 {
+func diffText[T text.String](before, after T, binary bool) []Edit[T] {
+	if text.Compare(before, after) == 0 {
 		return nil // common case
 	}
 
 	if binary || isASCII(before) && isASCII(after) {
 		return diffASCII(before, after)
 	}
-	return diffRunes[T, A](alg.ToRunes(before), alg.ToRunes(after))
+	return diffRunes[T](text.ToRunes(before), text.ToRunes(after))
 }
 
-func diffASCII[T text.Text](before, after T) []Edit[T] {
+func diffASCII[T text.String](before, after T) []Edit[T] {
 	diffs := lcs.DiffText(before, after)
 
 	// Convert from LCS diffs.
@@ -54,9 +46,7 @@ func diffASCII[T text.Text](before, after T) []Edit[T] {
 	return res
 }
 
-func diffRunes[T text.Text, A text.Algorithms[T]](before, after []rune) []Edit[T] {
-	var alg A
-
+func diffRunes[T text.String](before, after []rune) []Edit[T] {
 	diffs := lcs.DiffRunes(before, after)
 
 	// The diffs returned by the lcs package use indexes
@@ -69,7 +59,7 @@ func diffRunes[T text.Text, A text.Algorithms[T]](before, after []rune) []Edit[T
 		utf8Len += runesLen(before[lastEnd:d.Start]) // text between edits
 		start := utf8Len
 		utf8Len += runesLen(before[d.Start:d.End]) // text deleted by this edit
-		res[i] = Edit[T]{start, utf8Len, alg.ToText(after[d.ReplStart:d.ReplEnd])}
+		res[i] = Edit[T]{start, utf8Len, text.ToString[T](after[d.ReplStart:d.ReplEnd])}
 		lastEnd = d.End
 	}
 	return res
@@ -83,7 +73,7 @@ func runesLen(runes []rune) (len int) {
 	return len
 }
 
-func isASCII[T text.Text](s T) bool {
+func isASCII[T text.String](s T) bool {
 	for i := 0; i < len(s); i++ {
 		if s[i] >= utf8.RuneSelf {
 			return false

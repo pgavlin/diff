@@ -17,8 +17,8 @@ package difftest
 import (
 	"testing"
 
-	"github.com/pgavlin/text"
 	"github.com/pgavlin/diff"
+	"github.com/pgavlin/text"
 )
 
 const (
@@ -265,7 +265,7 @@ var TestCases = []struct {
 	},
 }
 
-func DiffTest[T text.Text](t *testing.T, compute func(before, after T) []diff.Edit[T]) {
+func DiffTest[T text.String](t *testing.T, compute func(before, after T) []diff.Edit[T]) {
 	for _, test := range TestCases {
 		t.Run(test.Name, func(t *testing.T) {
 			edits := compute(T(test.In), T(test.Out))

@@ -15,7 +15,7 @@ import (
 // Unified returns a unified diff of the old and new texts.
 // The old and new labels are the names of the old and new files.
 // If the texts are equal, it returns the empty string.
-func Unified[T text.Text](oldLabel, newLabel string, old, new T) string {
+func Unified[T text.String](oldLabel, newLabel string, old, new T) string {
 	edits := Text(old, new)
 	unified, err := ToUnified(oldLabel, newLabel, old, edits)
 	if err != nil {
@@ -28,7 +28,7 @@ func Unified[T text.Text](oldLabel, newLabel string, old, new T) string {
 // ToUnified applies the edits to content and returns a unified diff.
 // The old and new labels are the names of the content and result files.
 // It returns an error if the edits are inconsistent; see ApplyEdits.
-func ToUnified[T text.Text](oldLabel, newLabel string, content T, edits []Edit[T]) (string, error) {
+func ToUnified[T text.String](oldLabel, newLabel string, content T, edits []Edit[T]) (string, error) {
 	u, err := toUnified(oldLabel, newLabel, content, edits)
 	if err != nil {
 		return "", err
@@ -103,16 +103,7 @@ const (
 
 // toUnified takes a file contents and a sequence of edits, and calculates
 // a unified diff that represents those edits.
-func toUnified[T text.Text](fromName, toName string, content T, edits []Edit[T]) (unified, error) {
-	if text.UseStrings[T]() {
-		return toUnifiedImpl[T, text.Strings[T]](fromName, toName, content, edits)
-	}
-	return toUnifiedImpl[T, text.Bytes[T]](fromName, toName, content, edits)
-}
-
-func toUnifiedImpl[T text.Text, A text.Algorithms[T]](fromName, toName string, content T, edits []Edit[T]) (unified, error) {
-	var alg A
-
+func toUnified[T text.String](fromName, toName string, content T, edits []Edit[T]) (unified, error) {
 	u := unified{
 		From: fromName,
 		To:   toName,
@@ -121,19 +112,19 @@ func toUnifiedImpl[T text.Text, A text.Algorithms[T]](fromName, toName string, c
 		return u, nil
 	}
 	var err error
-	edits, err = lineEdits[T, A](content, edits) // expand to whole lines
+	edits, err = lineEdits(content, edits) // expand to whole lines
 	if err != nil {
 		return u, err
 	}
-	lines := splitLines[T, A](content)
+	lines := splitLines(content)
 	var h *hunk
 	last := 0
 	toLine := 0
 	for _, edit := range edits {
 		// Compute the zero-based line numbers of the edit start and end.
 		// TODO(adonovan): opt: compute incrementally, avoid O(n^2).
-		start := alg.Count(content[:edit.Start], T("\n"))
-		end := alg.Count(content[:edit.End], T("\n"))
+		start := text.Count(content[:edit.Start], "\n")
+		end := text.Count(content[:edit.End], "\n")
 		if edit.End == len(content) && len(content) > 0 && content[len(content)-1] != '\n' {
 			end++ // EOF counts as an implicit newline
 		}
@@ -167,7 +158,7 @@ func toUnifiedImpl[T text.Text, A text.Algorithms[T]](fromName, toName string, c
 			last++
 		}
 		if len(edit.New) != 0 {
-			for _, content := range splitLines[T, A](edit.New) {
+			for _, content := range splitLines(edit.New) {
 				h.Lines = append(h.Lines, line{Kind: Insert, Content: string(content)})
 				toLine++
 			}
@@ -181,16 +172,15 @@ func toUnifiedImpl[T text.Text, A text.Algorithms[T]](fromName, toName string, c
 	return u, nil
 }
 
-func splitLines[T text.Text, A text.Algorithms[T]](text T) []T {
-	var alg A
-	lines := alg.SplitAfter(text, T("\n"))
+func splitLines[T text.String](t T) []T {
+	lines := text.SplitAfter(t, "\n")
 	if len(lines[len(lines)-1]) == 0 {
 		lines = lines[:len(lines)-1]
 	}
 	return lines
 }
 
-func addEqualLines[T text.Text](h *hunk, lines []T, start, end int) int {
+func addEqualLines[T text.String](h *hunk, lines []T, start, end int) int {
 	delta := 0
 	for i := start; i < end; i++ {
 		if i < 0 {

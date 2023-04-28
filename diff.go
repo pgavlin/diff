@@ -14,7 +14,7 @@ import (
 
 // Edit represents a change to a section of a document.
 // The text within the specified span should be replaced by the supplied new text.
-type Edit[T text.Text] struct {
+type Edit[T text.String] struct {
 	Start, End int // byte offsets of the region to replace
 	New        T
 }
@@ -29,7 +29,7 @@ func (e Edit[T]) String() string {
 //
 // Apply returns an error if any edit is out of bounds,
 // or if any pair of edits is overlapping.
-func Apply[T text.Text](src T, edits []Edit[T]) (T, error) {
+func Apply[T text.String](src T, edits []Edit[T]) (T, error) {
 	edits, size, err := validate(src, edits)
 	if err != nil {
 		return T(""), err
@@ -57,7 +57,7 @@ func Apply[T text.Text](src T, edits []Edit[T]) (T, error) {
 // validate checks that edits are consistent with src,
 // and returns the size of the patched output.
 // It may return a different slice.
-func validate[T text.Text](src T, edits []Edit[T]) ([]Edit[T], int, error) {
+func validate[T text.String](src T, edits []Edit[T]) ([]Edit[T], int, error) {
 	if !sort.IsSorted(editsSort[T]{edits}) {
 		edits = append([]Edit[T](nil), edits...)
 		SortEdits(edits)
@@ -85,11 +85,11 @@ func validate[T text.Text](src T, edits []Edit[T]) ([]Edit[T], int, error) {
 // (end > start) at the same point, but uses a stable sort to preserve
 // the order of multiple insertions at the same point.
 // (Apply detects multiple deletions at the same point as an error.)
-func SortEdits[T text.Text](edits []Edit[T]) {
+func SortEdits[T text.String](edits []Edit[T]) {
 	sort.Stable(editsSort[T]{edits})
 }
 
-type editsSort[T text.Text] struct {
+type editsSort[T text.String] struct {
 	edits []Edit[T]
 }
 
@@ -105,9 +105,7 @@ func (a editsSort[T]) Swap(i, j int) { a.edits[i], a.edits[j] = a.edits[j], a.ed
 // lineEdits expands and merges a sequence of edits so that each
 // resulting edit replaces one or more complete lines.
 // See ApplyEdits for preconditions.
-func lineEdits[T text.Text, A text.Algorithms[T]](src T, edits []Edit[T]) ([]Edit[T], error) {
-	var alg A
-
+func lineEdits[T text.String](src T, edits []Edit[T]) ([]Edit[T], error) {
 	edits, _, err := validate(src, edits)
 	if err != nil {
 		return nil, err
@@ -132,39 +130,37 @@ expand:
 	// TODO(adonovan): opt: avoid quadratic cost of string += string.
 	for _, edit := range edits[1:] {
 		between := src[prev.End:edit.Start]
-		if !alg.ContainsAny(between, "\n") {
+		if !text.ContainsAny(between, "\n") {
 			// overlapping lines: combine with previous edit.
-			prev.New = alg.Join([]T{prev.New, between, edit.New}, T(""))
+			prev.New = text.Join([]T{prev.New, between, edit.New}, "")
 			prev.End = edit.End
 		} else {
 			// non-overlapping lines: flush previous edit.
-			expanded = append(expanded, expandEdit[T, A](prev, src))
+			expanded = append(expanded, expandEdit(prev, src))
 			prev = edit
 		}
 	}
-	return append(expanded, expandEdit[T, A](prev, src)), nil // flush final edit
+	return append(expanded, expandEdit(prev, src)), nil // flush final edit
 }
 
 // expandEdit returns edit expanded to complete whole lines.
-func expandEdit[T text.Text, A text.Algorithms[T]](edit Edit[T], src T) Edit[T] {
-	var alg A
-
+func expandEdit[T text.String](edit Edit[T], src T) Edit[T] {
 	// Expand start left to start of line.
 	// (delta is the zero-based column number of of start.)
 	start := edit.Start
-	if delta := start - 1 - alg.LastIndexByte(src[:start], '\n'); delta > 0 {
+	if delta := start - 1 - text.LastIndexByte(src[:start], '\n'); delta > 0 {
 		edit.Start -= delta
-		edit.New = alg.Concat(src[start-delta:start], edit.New)
+		edit.New = text.Concat(src[start-delta:start], edit.New)
 	}
 
 	// Expand end right to end of line.
 	end := edit.End
-	if nl := alg.IndexByte(src[end:], '\n'); nl < 0 {
+	if nl := text.IndexByte(src[end:], '\n'); nl < 0 {
 		edit.End = len(src) // extend to EOF
 	} else {
 		edit.End = end + nl + 1 // extend beyond \n
 	}
-	edit.New = alg.Concat(edit.New, src[end:edit.End])
+	edit.New = text.Concat(edit.New, src[end:edit.End])
 
 	return edit
 }

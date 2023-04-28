@@ -10,7 +10,7 @@ import (
 	"github.com/pgavlin/text"
 )
 
-func diffSize[T text.Text](t testing.TB, edits []diff.Edit[T]) int {
+func diffSize[T text.String](t testing.TB, edits []diff.Edit[T]) int {
 	type editJSON struct {
 		Start int    `json:"start,omitempty"`
 		End   int    `json:"end,omitempty"`
@@ -30,7 +30,7 @@ func diffSize[T text.Text](t testing.TB, edits []diff.Edit[T]) int {
 	return len(bytes)
 }
 
-func benchmarkDiff[T text.Text](b *testing.B, t1, t2 T) {
+func benchmarkDiff[T text.String](b *testing.B, t1, t2 T) {
 	b.Run("strings", func(b *testing.B) {
 		benchmarkDiffCore(b, string(t1), string(t2))
 	})
@@ -40,7 +40,7 @@ func benchmarkDiff[T text.Text](b *testing.B, t1, t2 T) {
 	})
 }
 
-func benchmarkDiffCore[T text.Text](b *testing.B, t1, t2 T) {
+func benchmarkDiffCore[T text.String](b *testing.B, t1, t2 T) {
 	b.Run("myers", func(b *testing.B) {
 		b.Run("ComputeEdits", func(b *testing.B) {
 			b.ReportMetric(0, "bytes")

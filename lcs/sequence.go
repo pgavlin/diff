@@ -5,6 +5,8 @@
 package lcs
 
 import (
+	"reflect"
+
 	"github.com/pgavlin/text"
 )
 
@@ -17,8 +19,8 @@ type sequences interface {
 	commonSuffixLen(ai, aj, bi, bj int) int // len(commonSuffix(A[ai:aj], B[bi:bj]))
 }
 
-func textSeqs[T text.Text](a, b T) sequences {
-	if text.UseStrings[T]() {
+func textSeqs[T text.String](a, b T) sequences {
+	if reflect.TypeOf(a).Kind() == reflect.String {
 		return stringSeqs{a: string(a), b: string(b)}
 	}
 	return bytesSeqs{a: []byte(a), b: []byte(b)}

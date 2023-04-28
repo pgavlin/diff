@@ -20,7 +20,7 @@ type Diff struct {
 
 // DiffText returns the differences between two texts.
 // It does not respect rune boundaries.
-func DiffText[T text.Text](a, b T) []Diff { return diff(textSeqs(a, b)) }
+func DiffText[T text.String](a, b T) []Diff { return diff(textSeqs(a, b)) }
 
 // DiffRunes returns the differences between two rune sequences.
 func DiffRunes(a, b []rune) []Diff { return diff(runesSeqs{a, b}) }
