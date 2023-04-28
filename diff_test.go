@@ -59,12 +59,41 @@ func TestNEdits(t *testing.T) {
 	}
 }
 
+func TestNEditsBinary(t *testing.T) {
+	for _, tc := range difftest.TestCases {
+		edits := diff.Binary(tc.In, tc.Out)
+		got, err := diff.Apply(tc.In, edits)
+		if err != nil {
+			t.Fatalf("Apply failed: %v", err)
+		}
+		if got != tc.Out {
+			t.Fatalf("%s: got %q wanted %q", tc.Name, got, tc.Out)
+		}
+	}
+}
+
 func TestNRandom(t *testing.T) {
 	rand.Seed(1)
 	for i := 0; i < 1000; i++ {
 		a := randstr("abω", 16)
 		b := randstr("abωc", 16)
 		edits := diff.Text(a, b)
+		got, err := diff.Apply(a, edits)
+		if err != nil {
+			t.Fatalf("Apply failed: %v", err)
+		}
+		if got != b {
+			t.Fatalf("%d: got %q, wanted %q, starting with %q", i, got, b, a)
+		}
+	}
+}
+
+func TestNRandomBinary(t *testing.T) {
+	rand.Seed(1)
+	for i := 0; i < 1000; i++ {
+		a := randstr("abω", 16)
+		b := randstr("abωc", 16)
+		edits := diff.Binary(a, b)
 		got, err := diff.Apply(a, edits)
 		if err != nil {
 			t.Fatalf("Apply failed: %v", err)
@@ -82,6 +111,20 @@ func FuzzRoundTrip(f *testing.F) {
 			return // inputs must be text
 		}
 		edits := diff.Text(a, b)
+		got, err := diff.Apply(a, edits)
+		if err != nil {
+			t.Fatalf("Apply failed: %v", err)
+		}
+		if got != b {
+			t.Fatalf("applying diff(%q, %q) gives %q; edits=%v", a, b, got, edits)
+		}
+	})
+}
+
+// $ go test -fuzz=FuzzRoundTripBinary ./internal/diff
+func FuzzRoundTripBinary(f *testing.F) {
+	f.Fuzz(func(t *testing.T, a, b string) {
+		edits := diff.Binary(a, b)
 		got, err := diff.Apply(a, edits)
 		if err != nil {
 			t.Fatalf("Apply failed: %v", err)
@@ -154,9 +197,9 @@ func TestToUnified(t *testing.T) {
 }
 
 func TestRegressionOld001(t *testing.T) {
-	a := "// Copyright 2019 The Go Authors. All rights reserved.\n// Use of this source code is governed by a BSD-style\n// license that can be found in the LICENSE file.\n\npackage diff_test\n\nimport (\n\t\"fmt\"\n\t\"math/rand\"\n\t\"strings\"\n\t\"testing\"\n\n\t\"golang.org/x/tools/gopls/internal/lsp/diff\"\n\t\"github.com/pgavlin/diff/difftest\"\n\t\"golang.org/x/tools/gopls/internal/span\"\n)\n"
+	a := "// Copyright 2019 The Go Authors. All rights reserved.\n// Use of this source code is governed by a BSD-style\n// license that can be found in the LICENSE file.\n\npackage diff_test\n\nimport (\n\t\"fmt\"\n\t\"math/rand\"\n\t\"strings\"\n\t\"testing\"\n\n\t\"golang.org/x/tools/gopls/internal/lsp/diff\"\n\t\"golang.org/x/tools/internal/diff/difftest\"\n\t\"golang.org/x/tools/gopls/internal/span\"\n)\n"
 
-	b := "// Copyright 2019 The Go Authors. All rights reserved.\n// Use of this source code is governed by a BSD-style\n// license that can be found in the LICENSE file.\n\npackage diff_test\n\nimport (\n\t\"fmt\"\n\t\"math/rand\"\n\t\"strings\"\n\t\"testing\"\n\n\t\"github.com/google/safehtml/template\"\n\t\"golang.org/x/tools/gopls/internal/lsp/diff\"\n\t\"github.com/pgavlin/diff/difftest\"\n\t\"golang.org/x/tools/gopls/internal/span\"\n)\n"
+	b := "// Copyright 2019 The Go Authors. All rights reserved.\n// Use of this source code is governed by a BSD-style\n// license that can be found in the LICENSE file.\n\npackage diff_test\n\nimport (\n\t\"fmt\"\n\t\"math/rand\"\n\t\"strings\"\n\t\"testing\"\n\n\t\"github.com/google/safehtml/template\"\n\t\"golang.org/x/tools/gopls/internal/lsp/diff\"\n\t\"golang.org/x/tools/internal/diff/difftest\"\n\t\"golang.org/x/tools/gopls/internal/span\"\n)\n"
 	diffs := diff.Text(a, b)
 	got, err := diff.Apply(a, diffs)
 	if err != nil {
