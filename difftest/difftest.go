@@ -265,15 +265,15 @@ var TestCases = []struct {
 	},
 }
 
-func DiffTest[T text.String](t *testing.T, compute func(before, after T) []diff.Edit[T]) {
+func DiffTest[S text.String](t *testing.T, compute func(before, after S) []diff.Edit[S]) {
 	for _, test := range TestCases {
 		t.Run(test.Name, func(t *testing.T) {
-			edits := compute(T(test.In), T(test.Out))
-			got, err := diff.Apply(T(test.In), edits)
+			edits := compute(S(test.In), S(test.Out))
+			got, err := diff.Apply(S(test.In), edits)
 			if err != nil {
 				t.Fatalf("Apply failed: %v", err)
 			}
-			unified, err := diff.ToUnified(FileA, FileB, T(test.In), edits)
+			unified, err := diff.ToUnified(FileA, FileB, S(test.In), edits)
 			if err != nil {
 				t.Fatalf("ToUnified: %v", err)
 			}

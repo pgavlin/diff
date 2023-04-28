@@ -5,12 +5,16 @@
 package lcs
 
 import (
-	"reflect"
+	"unsafe"
 
 	"github.com/pgavlin/text"
 )
 
 // This file defines the abstract sequence over which the LCS algorithm operates.
+
+func asString[S text.String](s S) string {
+	return *(*string)(unsafe.Pointer(&s))
+}
 
 // sequences abstracts a pair of sequences, A and B.
 type sequences interface {
@@ -19,11 +23,8 @@ type sequences interface {
 	commonSuffixLen(ai, aj, bi, bj int) int // len(commonSuffix(A[ai:aj], B[bi:bj]))
 }
 
-func textSeqs[T text.String](a, b T) sequences {
-	if reflect.TypeOf(a).Kind() == reflect.String {
-		return stringSeqs{a: string(a), b: string(b)}
-	}
-	return bytesSeqs{a: []byte(a), b: []byte(b)}
+func textSeqs[S1, S2 text.String](a S1, b S2) sequences {
+	return stringSeqs{a: asString(a), b: asString(b)}
 }
 
 type stringSeqs struct{ a, b string }

@@ -15,7 +15,7 @@ import (
 // Unified returns a unified diff of the old and new texts.
 // The old and new labels are the names of the old and new files.
 // If the texts are equal, it returns the empty string.
-func Unified[T text.String](oldLabel, newLabel string, old, new T) string {
+func Unified[S text.String](oldLabel, newLabel string, old, new S) string {
 	edits := Text(old, new)
 	unified, err := ToUnified(oldLabel, newLabel, old, edits)
 	if err != nil {
@@ -28,7 +28,7 @@ func Unified[T text.String](oldLabel, newLabel string, old, new T) string {
 // ToUnified applies the edits to content and returns a unified diff.
 // The old and new labels are the names of the content and result files.
 // It returns an error if the edits are inconsistent; see ApplyEdits.
-func ToUnified[T text.String](oldLabel, newLabel string, content T, edits []Edit[T]) (string, error) {
+func ToUnified[S text.String](oldLabel, newLabel string, content S, edits []Edit[S]) (string, error) {
 	u, err := toUnified(oldLabel, newLabel, content, edits)
 	if err != nil {
 		return "", err
@@ -103,7 +103,7 @@ const (
 
 // toUnified takes a file contents and a sequence of edits, and calculates
 // a unified diff that represents those edits.
-func toUnified[T text.String](fromName, toName string, content T, edits []Edit[T]) (unified, error) {
+func toUnified[S text.String](fromName, toName string, content S, edits []Edit[S]) (unified, error) {
 	u := unified{
 		From: fromName,
 		To:   toName,
@@ -172,7 +172,7 @@ func toUnified[T text.String](fromName, toName string, content T, edits []Edit[T
 	return u, nil
 }
 
-func splitLines[T text.String](t T) []T {
+func splitLines[S text.String](t S) []S {
 	lines := text.SplitAfter(t, "\n")
 	if len(lines[len(lines)-1]) == 0 {
 		lines = lines[:len(lines)-1]
@@ -180,7 +180,7 @@ func splitLines[T text.String](t T) []T {
 	return lines
 }
 
-func addEqualLines[T text.String](h *hunk, lines []T, start, end int) int {
+func addEqualLines[S text.String](h *hunk, lines []S, start, end int) int {
 	delta := 0
 	for i := start; i < end; i++ {
 		if i < 0 {

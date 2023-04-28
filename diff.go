@@ -14,12 +14,12 @@ import (
 
 // Edit represents a change to a section of a document.
 // The text within the specified span should be replaced by the supplied new text.
-type Edit[T text.String] struct {
+type Edit[S text.String] struct {
 	Start, End int // byte offsets of the region to replace
-	New        T
+	New        S
 }
 
-func (e Edit[T]) String() string {
+func (e Edit[S]) String() string {
 	return fmt.Sprintf("{Start:%d,End:%d,New:%s}", e.Start, e.End, string(e.New))
 }
 
@@ -29,10 +29,10 @@ func (e Edit[T]) String() string {
 //
 // Apply returns an error if any edit is out of bounds,
 // or if any pair of edits is overlapping.
-func Apply[T text.String](src T, edits []Edit[T]) (T, error) {
+func Apply[S1, S2 text.String](src S1, edits []Edit[S2]) (S1, error) {
 	edits, size, err := validate(src, edits)
 	if err != nil {
-		return T(""), err
+		return text.Empty[S1](), err
 	}
 
 	// Apply edits.
@@ -51,15 +51,15 @@ func Apply[T text.String](src T, edits []Edit[T]) (T, error) {
 		panic("wrong size")
 	}
 
-	return T(out), nil
+	return S1(out), nil
 }
 
 // validate checks that edits are consistent with src,
 // and returns the size of the patched output.
 // It may return a different slice.
-func validate[T text.String](src T, edits []Edit[T]) ([]Edit[T], int, error) {
-	if !sort.IsSorted(editsSort[T]{edits}) {
-		edits = append([]Edit[T](nil), edits...)
+func validate[S1, S2 text.String](src S1, edits []Edit[S2]) ([]Edit[S2], int, error) {
+	if !sort.IsSorted(editsSort[S2]{edits}) {
+		edits = append([]Edit[S2](nil), edits...)
 		SortEdits(edits)
 	}
 
@@ -85,27 +85,27 @@ func validate[T text.String](src T, edits []Edit[T]) ([]Edit[T], int, error) {
 // (end > start) at the same point, but uses a stable sort to preserve
 // the order of multiple insertions at the same point.
 // (Apply detects multiple deletions at the same point as an error.)
-func SortEdits[T text.String](edits []Edit[T]) {
-	sort.Stable(editsSort[T]{edits})
+func SortEdits[S text.String](edits []Edit[S]) {
+	sort.Stable(editsSort[S]{edits})
 }
 
-type editsSort[T text.String] struct {
-	edits []Edit[T]
+type editsSort[S text.String] struct {
+	edits []Edit[S]
 }
 
-func (a editsSort[T]) Len() int { return len(a.edits) }
-func (a editsSort[T]) Less(i, j int) bool {
+func (a editsSort[S]) Len() int { return len(a.edits) }
+func (a editsSort[S]) Less(i, j int) bool {
 	if cmp := a.edits[i].Start - a.edits[j].Start; cmp != 0 {
 		return cmp < 0
 	}
 	return a.edits[i].End < a.edits[j].End
 }
-func (a editsSort[T]) Swap(i, j int) { a.edits[i], a.edits[j] = a.edits[j], a.edits[i] }
+func (a editsSort[S]) Swap(i, j int) { a.edits[i], a.edits[j] = a.edits[j], a.edits[i] }
 
 // lineEdits expands and merges a sequence of edits so that each
 // resulting edit replaces one or more complete lines.
 // See ApplyEdits for preconditions.
-func lineEdits[T text.String](src T, edits []Edit[T]) ([]Edit[T], error) {
+func lineEdits[S text.String](src S, edits []Edit[S]) ([]Edit[S], error) {
 	edits, _, err := validate(src, edits)
 	if err != nil {
 		return nil, err
@@ -124,7 +124,7 @@ func lineEdits[T text.String](src T, edits []Edit[T]) ([]Edit[T], error) {
 	return edits, nil // aligned
 
 expand:
-	expanded := make([]Edit[T], 0, len(edits)) // a guess
+	expanded := make([]Edit[S], 0, len(edits)) // a guess
 	prev := edits[0]
 	// TODO(adonovan): opt: start from the first misaligned edit.
 	// TODO(adonovan): opt: avoid quadratic cost of string += string.
@@ -132,7 +132,7 @@ expand:
 		between := src[prev.End:edit.Start]
 		if !text.ContainsAny(between, "\n") {
 			// overlapping lines: combine with previous edit.
-			prev.New = text.Join([]T{prev.New, between, edit.New}, "")
+			prev.New = text.Join([]S{prev.New, between, edit.New}, "")
 			prev.End = edit.End
 		} else {
 			// non-overlapping lines: flush previous edit.
@@ -144,7 +144,7 @@ expand:
 }
 
 // expandEdit returns edit expanded to complete whole lines.
-func expandEdit[T text.String](edit Edit[T], src T) Edit[T] {
+func expandEdit[S text.String](edit Edit[S], src S) Edit[S] {
 	// Expand start left to start of line.
 	// (delta is the zero-based column number of of start.)
 	start := edit.Start

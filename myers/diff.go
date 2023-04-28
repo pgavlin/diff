@@ -14,7 +14,7 @@ import (
 // https://blog.jcoglan.com/2017/02/17/the-myers-diff-algorithm-part-3/
 // https://www.codeproject.com/Articles/42279/%2FArticles%2F42279%2FInvestigating-Myers-diff-algorithm-Part-1-of-2
 
-func ComputeEdits[T text.String](before, after T) []diff.Edit[T] {
+func ComputeEdits[S text.String](before, after S) []diff.Edit[S] {
 	beforeLines := splitLines(before)
 	ops := operations(beforeLines, splitLines(after))
 
@@ -27,33 +27,33 @@ func ComputeEdits[T text.String](before, after T) []diff.Edit[T] {
 	}
 	lineOffsets = append(lineOffsets, total) // EOF
 
-	edits := make([]diff.Edit[T], 0, len(ops))
+	edits := make([]diff.Edit[S], 0, len(ops))
 	for _, op := range ops {
 		start, end := lineOffsets[op.I1], lineOffsets[op.I2]
 		switch op.Kind {
 		case diff.Delete:
 			// Delete: before[I1:I2] is deleted.
-			edits = append(edits, diff.Edit[T]{Start: start, End: end})
+			edits = append(edits, diff.Edit[S]{Start: start, End: end})
 		case diff.Insert:
 			// Insert: after[J1:J2] is inserted at before[I1:I1].
 			if content := text.Join(op.Content, ""); len(content) != 0 {
-				edits = append(edits, diff.Edit[T]{Start: start, End: end, New: content})
+				edits = append(edits, diff.Edit[S]{Start: start, End: end, New: content})
 			}
 		}
 	}
 	return edits
 }
 
-type operation[T text.String] struct {
+type operation[S text.String] struct {
 	Kind    diff.OpKind
-	Content []T // content from b
+	Content []S // content from b
 	I1, I2  int // indices of the line in a
 	J1      int // indices of the line in b, J2 implied by len(Content)
 }
 
 // operations returns the list of operations to convert a into b, consolidating
 // operations for multiple lines and not including equal lines.
-func operations[T text.String](a, b []T) []*operation[T] {
+func operations[S text.String](a, b []S) []*operation[S] {
 	if len(a) == 0 && len(b) == 0 {
 		return nil
 	}
@@ -64,9 +64,9 @@ func operations[T text.String](a, b []T) []*operation[T] {
 	M, N := len(a), len(b)
 
 	var i int
-	solution := make([]*operation[T], len(a)+len(b))
+	solution := make([]*operation[S], len(a)+len(b))
 
-	add := func(op *operation[T], i2, j2 int) {
+	add := func(op *operation[S], i2, j2 int) {
 		if op == nil {
 			return
 		}
@@ -82,11 +82,11 @@ func operations[T text.String](a, b []T) []*operation[T] {
 		if len(snake) < 2 {
 			continue
 		}
-		var op *operation[T]
+		var op *operation[S]
 		// delete (horizontal)
 		for snake[0]-snake[1] > x-y {
 			if op == nil {
-				op = &operation[T]{
+				op = &operation[S]{
 					Kind: diff.Delete,
 					I1:   x,
 					J1:   y,
@@ -102,7 +102,7 @@ func operations[T text.String](a, b []T) []*operation[T] {
 		// insert (vertical)
 		for snake[0]-snake[1] < x-y {
 			if op == nil {
-				op = &operation[T]{
+				op = &operation[S]{
 					Kind: diff.Insert,
 					I1:   x,
 					J1:   y,
@@ -157,7 +157,7 @@ func backtrack(trace [][]int, x, y, offset int) [][]int {
 }
 
 // shortestEditSequence returns the shortest edit sequence that converts a into b.
-func shortestEditSequence[T text.String](a, b []T) ([][]int, int) {
+func shortestEditSequence[S text.String](a, b []S) ([][]int, int) {
 	M, N := len(a), len(b)
 	V := make([]int, 2*(N+M)+1)
 	offset := N + M
@@ -205,7 +205,7 @@ func shortestEditSequence[T text.String](a, b []T) ([][]int, int) {
 	return nil, 0
 }
 
-func splitLines[T text.String](t T) []T {
+func splitLines[S text.String](t S) []S {
 	lines := text.SplitAfter(t, "\n")
 	if len(lines[len(lines)-1]) == 0 {
 		lines = lines[:len(lines)-1]
