@@ -18,6 +18,24 @@ func Text[S1, S2 text.String](before S1, after S2) []Edit[S2] {
 	return diffText(before, after, false)
 }
 
+// Lines computes the line differences between two texts.
+func Lines[S1, S2 text.String](before S1, after S2) []Edit[S2] {
+	beforeLines, afterLines := splitLines(before), splitLines(after)
+
+	diffs := lcs.DiffLines(beforeLines, afterLines)
+
+	// Build tables mapping line number to offset.
+	beforeLineOffsets, afterLineOffsets := lineOffsets(beforeLines), lineOffsets(afterLines)
+
+	edits := make([]Edit[S2], 0, len(diffs))
+	for _, diff := range diffs {
+		start, end := beforeLineOffsets[diff.Start], beforeLineOffsets[diff.End]
+		replStart, replEnd := afterLineOffsets[diff.ReplStart], afterLineOffsets[diff.ReplEnd]
+		edits = append(edits, Edit[S2]{Start: start, End: end, New: after[replStart:replEnd]})
+	}
+	return edits
+}
+
 // Binary computes the differences between two texts. The texts are treated as
 // binary data. The resulting edits do not respect rune boundaries.
 func Binary[S1, S2 text.String](before S1, after S2) []Edit[S2] {
@@ -25,7 +43,7 @@ func Binary[S1, S2 text.String](before S1, after S2) []Edit[S2] {
 }
 
 func diffText[S1, S2 text.String](before S1, after S2, binary bool) []Edit[S2] {
-	if text.Compare(before, after) == 0 {
+	if text.Equal(before, after) {
 		return nil // common case
 	}
 

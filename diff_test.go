@@ -72,6 +72,22 @@ func TestNEditsBinary(t *testing.T) {
 	}
 }
 
+func TestNEditsLines(t *testing.T) {
+	for _, tc := range difftest.TestCases {
+		edits := diff.Lines(tc.In, tc.Out)
+		got, err := diff.Apply(tc.In, edits)
+		if err != nil {
+			t.Fatalf("Apply failed: %v", err)
+		}
+		if got != tc.Out {
+			t.Fatalf("%s: got %q wanted %q", tc.Name, got, tc.Out)
+		}
+		if len(edits) < len(tc.LineEdits) {
+			t.Errorf("got %v, expected %v for %#v", edits, tc.LineEdits, tc)
+		}
+	}
+}
+
 func TestNRandom(t *testing.T) {
 	rand.Seed(1)
 	for i := 0; i < 1000; i++ {
@@ -94,6 +110,22 @@ func TestNRandomBinary(t *testing.T) {
 		a := randstr("abω", 16)
 		b := randstr("abωc", 16)
 		edits := diff.Binary(a, b)
+		got, err := diff.Apply(a, edits)
+		if err != nil {
+			t.Fatalf("Apply failed: %v", err)
+		}
+		if got != b {
+			t.Fatalf("%d: got %q, wanted %q, starting with %q", i, got, b, a)
+		}
+	}
+}
+
+func TestNRandomLines(t *testing.T) {
+	rand.Seed(1)
+	for i := 0; i < 1000; i++ {
+		a := randstr("abω\n", 16)
+		b := randstr("abωc\n", 16)
+		edits := diff.Lines(a, b)
 		got, err := diff.Apply(a, edits)
 		if err != nil {
 			t.Fatalf("Apply failed: %v", err)

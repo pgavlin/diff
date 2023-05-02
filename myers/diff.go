@@ -182,7 +182,7 @@ func shortestEditSequence[S1, S2 text.String](a []S1, b []S2) ([][]int, int) {
 			y := x - k
 
 			// Diagonal moves while we have equal contents.
-			for x < M && y < N && text.Compare(a[x], b[y]) == 0 {
+			for x < M && y < N && text.Equal(a[x], b[y]) {
 				x++
 				y++
 			}

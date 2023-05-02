@@ -74,6 +74,13 @@ func benchmarkDiffCore[S text.String](b *testing.B, t1, t2 S) {
 			}
 		})
 
+		b.Run("Lines", func(b *testing.B) {
+			b.ReportMetric(0, "bytes")
+			for i := 0; i < b.N; i++ {
+				diff.Lines(t1, t2)
+			}
+		})
+
 		b.Run("Apply", func(b *testing.B) {
 			edits := diff.Text(t1, t2)
 			b.ResetTimer()
@@ -83,6 +90,17 @@ func benchmarkDiffCore[S text.String](b *testing.B, t1, t2 S) {
 				diff.Apply(t1, edits)
 			}
 		})
+
+		b.Run("ApplyLines", func(b *testing.B) {
+			edits := diff.Lines(t1, t2)
+			b.ResetTimer()
+			b.ReportMetric(float64(diffSize(b, edits)), "bytes")
+
+			for i := 0; i < b.N; i++ {
+				diff.Apply(t1, edits)
+			}
+		})
+
 	})
 }
 

@@ -180,6 +180,17 @@ func splitLines[S text.String](t S) []S {
 	return lines
 }
 
+func lineOffsets[S text.String](lines []S) []int {
+	lineOffsets := make([]int, 0, len(lines)+1)
+	total := 0
+	for i := range lines {
+		lineOffsets = append(lineOffsets, total)
+		total += len(lines[i])
+	}
+	lineOffsets = append(lineOffsets, total) // EOF
+	return lineOffsets
+}
+
 func addEqualLines[S text.String](h *hunk, lines []S, start, end int) int {
 	delta := 0
 	for i := start; i < end; i++ {
