@@ -18,6 +18,11 @@ type Diff struct {
 	ReplStart, ReplEnd int // offset of replacement text in B
 }
 
+// DiffSlices returns the difference between two slices.
+func DiffSlices[T comparable, S1 ~[]T, S2 ~[]T](a S1, b S2) []Diff {
+	return diff(sliceSeqs[T, S1, S2]{a, b})
+}
+
 // DiffText returns the differences between two texts.
 // It does not respect rune boundaries.
 func DiffText[S1, S2 text.String](a S1, b S2) []Diff { return diff(textSeqs(a, b)) }

@@ -27,6 +27,19 @@ func textSeqs[S1, S2 text.String](a S1, b S2) sequences {
 	return stringSeqs{a: asString(a), b: asString(b)}
 }
 
+type sliceSeqs[T comparable, S1 ~[]T, S2 ~[]T] struct {
+	a S1
+	b S2
+}
+
+func (s sliceSeqs[T, S1, S2]) lengths() (int, int) { return len(s.a), len(s.b) }
+func (s sliceSeqs[T, S1, S2]) commonPrefixLen(ai, aj, bi, bj int) int {
+	return commonPrefixLenSlices(s.a[ai:aj], s.b[bi:bj])
+}
+func (s sliceSeqs[T, S1, S2]) commonSuffixLen(ai, aj, bi, bj int) int {
+	return commonSuffixLenSlices(s.a[ai:aj], s.b[bi:bj])
+}
+
 type lineSeqs[S1, S2 text.String] struct {
 	a []S1
 	b []S2
@@ -112,6 +125,14 @@ func commonPrefixLenLines[S1, S2 text.String](a []S1, b []S2) int {
 	}
 	return i
 }
+func commonPrefixLenSlices[T comparable, S1 ~[]T, S2 ~[]T](a S1, b S2) int {
+	n := min(len(a), len(b))
+	i := 0
+	for i < n && a[i] == b[i] {
+		i++
+	}
+	return i
+}
 
 // commonSuffixLen* returns the length of the common suffix of a[ai:aj] and b[bi:bj].
 func commonSuffixLenBytes(a, b []byte) int {
@@ -142,6 +163,14 @@ func commonSuffixLenLines[S1, S2 text.String](a []S1, b []S2) int {
 	n := min(len(a), len(b))
 	i := 0
 	for i < n && text.Equal(a[len(a)-1-i], b[len(b)-1-i]) {
+		i++
+	}
+	return i
+}
+func commonSuffixLenSlices[T comparable, S1 ~[]T, S2 ~[]T](a S1, b S2) int {
+	n := min(len(a), len(b))
+	i := 0
+	for i < n && a[len(a)-1-i] == b[len(b)-1-i] {
 		i++
 	}
 	return i

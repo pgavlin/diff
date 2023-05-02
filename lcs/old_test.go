@@ -241,6 +241,12 @@ func BenchmarkLargeFileSmallDiff(b *testing.B) {
 		}
 	})
 
+	b.Run("slices", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			compute(sliceSeqs[byte, []byte, []byte]{srcBytes, dstBytes}, twosided, len(srcBytes)+len(dstBytes))
+		}
+	})
+
 	srcRunes := []rune(src)
 	dstRunes := []rune(dst)
 	b.Run("runes", func(b *testing.B) {
