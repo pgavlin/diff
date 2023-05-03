@@ -23,6 +23,16 @@ func DiffSlices[T comparable, S1 ~[]T, S2 ~[]T](a S1, b S2) []Diff {
 	return diff(sliceSeqs[T, S1, S2]{a, b})
 }
 
+// EqualsComparer is an interface for equality-comparing types.
+type EqualsComparer[T1, T2 any] interface {
+	Equal(a T1, b T2) bool
+}
+
+// DiffComparables returns the difference between two slices of comparable elements.
+func DiffAnySlices[T1, T2 any, S1 ~[]T1, S2 ~[]T2, C EqualsComparer[T1, T2]](a S1, b S2, c C) []Diff {
+	return diff(anySliceSeqs[T1, T2, S1, S2, C]{a, b, c})
+}
+
 // DiffText returns the differences between two texts.
 // It does not respect rune boundaries.
 func DiffText[S1, S2 text.String](a S1, b S2) []Diff { return diff(textSeqs(a, b)) }

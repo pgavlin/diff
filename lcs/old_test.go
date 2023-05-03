@@ -128,6 +128,12 @@ func TestRandOld(t *testing.T) {
 	}
 }
 
+type byteEquals struct{}
+
+func (byteEquals) Equal(a, b byte) bool {
+	return a == b
+}
+
 // TestDiffAPI tests the public API functions (Diff{Bytes,Strings,Runes})
 // to ensure at least miminal parity of the three representations.
 func TestDiffAPI(t *testing.T) {
@@ -153,6 +159,16 @@ func TestDiffAPI(t *testing.T) {
 		if gotRunes != test.wantRunes {
 			t.Errorf("DiffRunes(%q, %q) = %v, want %v",
 				test.a, test.b, gotRunes, test.wantRunes)
+		}
+		gotSlices := fmt.Sprint(DiffSlices([]byte(test.a), []byte(test.b)))
+		if gotSlices != test.wantBytes {
+			t.Errorf("DiffSlices(%q, %q) = %v, want %v",
+				test.a, test.b, gotSlices, test.wantBytes)
+		}
+		gotAnySlices := fmt.Sprint(DiffAnySlices([]byte(test.a), []byte(test.b), byteEquals{}))
+		if gotAnySlices != test.wantBytes {
+			t.Errorf("DiffAnySlices(%q, %q) = %v, want %v",
+				test.a, test.b, gotAnySlices, test.wantBytes)
 		}
 	}
 }
@@ -244,6 +260,12 @@ func BenchmarkLargeFileSmallDiff(b *testing.B) {
 	b.Run("slices", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			compute(sliceSeqs[byte, []byte, []byte]{srcBytes, dstBytes}, twosided, len(srcBytes)+len(dstBytes))
+		}
+	})
+
+	b.Run("anySlices", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			compute(anySliceSeqs[byte, byte, []byte, []byte, byteEquals]{srcBytes, dstBytes, byteEquals{}}, twosided, len(srcBytes)+len(dstBytes))
 		}
 	})
 
