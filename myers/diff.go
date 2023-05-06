@@ -14,9 +14,15 @@ import (
 // https://blog.jcoglan.com/2017/02/17/the-myers-diff-algorithm-part-3/
 // https://www.codeproject.com/Articles/42279/%2FArticles%2F42279%2FInvestigating-Myers-diff-algorithm-Part-1-of-2
 
+type Operation struct {
+	Kind               diff.OpKind
+	Start, End         int // indices of the line in a
+	ReplStart, ReplEnd int // indices of the line in b, J2 implied by len(Content)
+}
+
 func ComputeEdits[S1, S2 text.String](before S1, after S2) []diff.Edit[S2] {
-	beforeLines := splitLines(before)
-	ops := operations(beforeLines, splitLines(after))
+	beforeLines, afterLines := splitLines(before), splitLines(after)
+	ops := Operations(beforeLines, afterLines)
 
 	// Build a table mapping line number to offset.
 	lineOffsets := make([]int, 0, len(beforeLines)+1)
@@ -29,14 +35,14 @@ func ComputeEdits[S1, S2 text.String](before S1, after S2) []diff.Edit[S2] {
 
 	edits := make([]diff.Edit[S2], 0, len(ops))
 	for _, op := range ops {
-		start, end := lineOffsets[op.I1], lineOffsets[op.I2]
+		start, end := lineOffsets[op.Start], lineOffsets[op.End]
 		switch op.Kind {
 		case diff.Delete:
 			// Delete: before[I1:I2] is deleted.
 			edits = append(edits, diff.Edit[S2]{Start: start, End: end})
 		case diff.Insert:
 			// Insert: after[J1:J2] is inserted at before[I1:I1].
-			if content := text.Join(op.Content, ""); len(content) != 0 {
+			if content := text.Join(afterLines[op.ReplStart:op.ReplEnd], ""); len(content) != 0 {
 				edits = append(edits, diff.Edit[S2]{Start: start, End: end, New: content})
 			}
 		}
@@ -44,16 +50,9 @@ func ComputeEdits[S1, S2 text.String](before S1, after S2) []diff.Edit[S2] {
 	return edits
 }
 
-type operation[S text.String] struct {
-	Kind    diff.OpKind
-	Content []S // content from b
-	I1, I2  int // indices of the line in a
-	J1      int // indices of the line in b, J2 implied by len(Content)
-}
-
-// operations returns the list of operations to convert a into b, consolidating
+// Operations returns the list of operations to convert a into b, consolidating
 // operations for multiple lines and not including equal lines.
-func operations[S1, S2 text.String](a []S1, b []S2) []*operation[S2] {
+func Operations[S1, S2 text.String, A ~[]S1, B ~[]S2](a A, b B) []Operation {
 	if len(a) == 0 && len(b) == 0 {
 		return nil
 	}
@@ -64,17 +63,17 @@ func operations[S1, S2 text.String](a []S1, b []S2) []*operation[S2] {
 	M, N := len(a), len(b)
 
 	var i int
-	solution := make([]*operation[S2], len(a)+len(b))
+	solution := make([]Operation, len(a)+len(b))
 
-	add := func(op *operation[S2], i2, j2 int) {
+	add := func(op *Operation, i2, j2 int) {
 		if op == nil {
 			return
 		}
-		op.I2 = i2
+		op.End = i2
 		if op.Kind == diff.Insert {
-			op.Content = b[op.J1:j2]
+			op.ReplEnd = j2
 		}
-		solution[i] = op
+		solution[i] = *op
 		i++
 	}
 	x, y := 0, 0
@@ -82,14 +81,14 @@ func operations[S1, S2 text.String](a []S1, b []S2) []*operation[S2] {
 		if len(snake) < 2 {
 			continue
 		}
-		var op *operation[S2]
+		var op *Operation
 		// delete (horizontal)
 		for snake[0]-snake[1] > x-y {
 			if op == nil {
-				op = &operation[S2]{
-					Kind: diff.Delete,
-					I1:   x,
-					J1:   y,
+				op = &Operation{
+					Kind:      diff.Delete,
+					Start:     x,
+					ReplStart: y,
 				}
 			}
 			x++
@@ -102,10 +101,10 @@ func operations[S1, S2 text.String](a []S1, b []S2) []*operation[S2] {
 		// insert (vertical)
 		for snake[0]-snake[1] < x-y {
 			if op == nil {
-				op = &operation[S2]{
-					Kind: diff.Insert,
-					I1:   x,
-					J1:   y,
+				op = &Operation{
+					Kind:      diff.Insert,
+					Start:     x,
+					ReplStart: y,
 				}
 			}
 			y++

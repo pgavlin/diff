@@ -11,6 +11,8 @@ import (
 	"math/rand"
 	"strings"
 	"testing"
+
+	"github.com/pgavlin/text"
 )
 
 func TestAlgosOld(t *testing.T) {
@@ -257,6 +259,20 @@ func BenchmarkLargeFileSmallDiff(b *testing.B) {
 		}
 	})
 
+	srcLines, dstLines := splitLines(src), splitLines(dst)
+	b.Run("lines", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			compute(lineSeqs[string, string]{srcLines, dstLines}, twosided, len(srcLines)+len(dstLines))
+		}
+	})
+
+	srcSpans, dstSpans := splitSpans(src), splitSpans(dst)
+	b.Run("spans", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			compute(sliceSeqs[string, []string, []string]{srcSpans, dstSpans}, twosided, len(srcBytes)+len(dstBytes))
+		}
+	})
+
 	b.Run("slices", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			compute(sliceSeqs[byte, []byte, []byte]{srcBytes, dstBytes}, twosided, len(srcBytes)+len(dstBytes))
@@ -276,4 +292,16 @@ func BenchmarkLargeFileSmallDiff(b *testing.B) {
 			compute(runesSeqs{srcRunes, dstRunes}, twosided, len(srcRunes)+len(dstRunes))
 		}
 	})
+}
+
+func splitLines[S text.String](t S) []S {
+	lines := text.SplitAfter(t, "\n")
+	if len(lines[len(lines)-1]) == 0 {
+		lines = lines[:len(lines)-1]
+	}
+	return lines
+}
+
+func splitSpans[S text.String](t S) []S {
+	return text.Fields(t)
 }
