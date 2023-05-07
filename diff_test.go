@@ -18,7 +18,16 @@ import (
 	"github.com/pgavlin/diff"
 	"github.com/pgavlin/diff/difftest"
 	"github.com/pgavlin/diff/testenv"
+	"github.com/pgavlin/text"
 )
+
+func applyTo[S1, S2 text.String](src S1, edits []diff.Edit[S2]) (S1, error) {
+	var buf text.Builder[S1]
+	if _, err := diff.ApplyTo(&buf, text.NewReader(src), len(src), edits); err != nil {
+		return text.Empty[S1](), err
+	}
+	return buf.Text(), nil
+}
 
 func TestApply(t *testing.T) {
 	for _, tc := range difftest.TestCases {
@@ -32,6 +41,29 @@ func TestApply(t *testing.T) {
 			}
 			if tc.LineEdits != nil {
 				got, err := diff.Apply(tc.In, tc.LineEdits)
+				if err != nil {
+					t.Fatalf("Apply(LineEdits) failed: %v", err)
+				}
+				if got != tc.Out {
+					t.Errorf("Apply(LineEdits): got %q, want %q", got, tc.Out)
+				}
+			}
+		})
+	}
+}
+
+func TestApplyTo(t *testing.T) {
+	for _, tc := range difftest.TestCases {
+		t.Run(tc.Name, func(t *testing.T) {
+			got, err := applyTo(tc.In, tc.Edits)
+			if err != nil {
+				t.Fatalf("Apply(Edits) failed: %v", err)
+			}
+			if got != tc.Out {
+				t.Errorf("Apply(Edits): got %q, want %q", got, tc.Out)
+			}
+			if tc.LineEdits != nil {
+				got, err := applyTo(tc.In, tc.LineEdits)
 				if err != nil {
 					t.Fatalf("Apply(LineEdits) failed: %v", err)
 				}

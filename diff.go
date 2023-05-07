@@ -7,6 +7,7 @@ package diff
 
 import (
 	"fmt"
+	"io"
 	"sort"
 
 	"github.com/pgavlin/text"
@@ -30,7 +31,7 @@ func (e Edit[S]) String() string {
 // Apply returns an error if any edit is out of bounds,
 // or if any pair of edits is overlapping.
 func Apply[S1, S2 text.String](src S1, edits []Edit[S2]) (S1, error) {
-	edits, size, err := validate(src, edits)
+	edits, size, err := Validate(len(src), edits)
 	if err != nil {
 		return text.Empty[S1](), err
 	}
@@ -54,20 +55,63 @@ func Apply[S1, S2 text.String](src S1, edits []Edit[S2]) (S1, error) {
 	return S1(out), nil
 }
 
-// validate checks that edits are consistent with src,
+// ApplyTo applies a sequence of edits to the src Reader and writes the
+// result to the dst Writer. Edits are applied in order of start offset;
+// edits with the same start offset are applied in they order they were
+// provided.
+//
+// ApplyTo returns an error if any edit is out of bounds,
+// or if any pair of edits is overlapping.
+func ApplyTo[S text.String](dst io.Writer, src io.Reader, srcLen int, edits []Edit[S]) (int64, error) {
+	edits, _, err := Validate(srcLen, edits)
+	if err != nil {
+		return 0, err
+	}
+
+	// Apply edits.
+	cursor, lastEnd, written := int64(0), int64(0), int64(0)
+	for _, edit := range edits {
+		if lastEnd < int64(edit.Start) {
+			if _, err := io.CopyN(io.Discard, src, lastEnd-cursor); err != nil {
+				return written, err
+			}
+			cursor = lastEnd
+
+			w, err := io.CopyN(dst, src, int64(edit.Start)-lastEnd)
+			written += w
+			if err != nil {
+				return written, err
+			}
+			cursor = int64(edit.Start)
+		}
+		w, err := dst.Write([]byte(edit.New))
+		written += int64(w)
+		if err != nil {
+			return written, err
+		}
+		lastEnd = int64(edit.End)
+	}
+	if _, err := io.CopyN(io.Discard, src, lastEnd-cursor); err != nil {
+		return written, err
+	}
+	w, err := io.Copy(dst, src)
+	return written + w, err
+}
+
+// Validate checks that edits are consistent with src,
 // and returns the size of the patched output.
 // It may return a different slice.
-func validate[S1, S2 text.String](src S1, edits []Edit[S2]) ([]Edit[S2], int, error) {
-	if !sort.IsSorted(editsSort[S2]{edits}) {
-		edits = append([]Edit[S2](nil), edits...)
+func Validate[S text.String](srcLen int, edits []Edit[S]) ([]Edit[S], int, error) {
+	if !sort.IsSorted(editsSort[S]{edits}) {
+		edits = append([]Edit[S](nil), edits...)
 		SortEdits(edits)
 	}
 
 	// Check validity of edits and compute final size.
-	size := len(src)
+	size := srcLen
 	lastEnd := 0
 	for _, edit := range edits {
-		if !(0 <= edit.Start && edit.Start <= edit.End && edit.End <= len(src)) {
+		if !(0 <= edit.Start && edit.Start <= edit.End && edit.End <= srcLen) {
 			return nil, 0, fmt.Errorf("diff has out-of-bounds edits")
 		}
 		if edit.Start < lastEnd {
@@ -106,7 +150,7 @@ func (a editsSort[S]) Swap(i, j int) { a.edits[i], a.edits[j] = a.edits[j], a.ed
 // resulting edit replaces one or more complete lines.
 // See ApplyEdits for preconditions.
 func lineEdits[S text.String](src S, edits []Edit[S]) ([]Edit[S], error) {
-	edits, _, err := validate(src, edits)
+	edits, _, err := Validate(len(src), edits)
 	if err != nil {
 		return nil, err
 	}
