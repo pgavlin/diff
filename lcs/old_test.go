@@ -16,7 +16,7 @@ import (
 )
 
 func TestAlgosOld(t *testing.T) {
-	for i, algo := range []func(*editGraph) lcs{forward, backward, twosided} {
+	for i, algo := range []func(*editGraph[stringSeqs]) lcs{forward[stringSeqs], backward[stringSeqs], twosided[stringSeqs]} {
 		t.Run(strings.Fields("forward backward twosided")[i], func(t *testing.T) {
 			for _, tx := range Btests {
 				lim := len(tx.a) + len(tx.b)
@@ -43,19 +43,19 @@ func TestIntOld(t *testing.T) {
 		left := tx.a + lfill
 		right := tx.b + rfill
 		lim := len(tx.a) + len(tx.b)
-		diffs, lcs := compute(stringSeqs{left, right}, twosided, lim)
+		diffs, lcs := compute(stringSeqs{left, right}, twosided[stringSeqs], lim)
 		check(t, left, lcs, tx.lcs)
 		checkDiffs(t, left, diffs, right)
-		diffs, lcs = compute(stringSeqs{right, left}, twosided, lim)
+		diffs, lcs = compute(stringSeqs{right, left}, twosided[stringSeqs], lim)
 		check(t, right, lcs, tx.lcs)
 		checkDiffs(t, right, diffs, left)
 
 		left = lfill + tx.a
 		right = rfill + tx.b
-		diffs, lcs = compute(stringSeqs{left, right}, twosided, lim)
+		diffs, lcs = compute(stringSeqs{left, right}, twosided[stringSeqs], lim)
 		check(t, left, lcs, tx.lcs)
 		checkDiffs(t, left, diffs, right)
-		diffs, lcs = compute(stringSeqs{right, left}, twosided, lim)
+		diffs, lcs = compute(stringSeqs{right, left}, twosided[stringSeqs], lim)
 		check(t, right, lcs, tx.lcs)
 		checkDiffs(t, right, diffs, left)
 	}
@@ -64,7 +64,7 @@ func TestIntOld(t *testing.T) {
 func TestSpecialOld(t *testing.T) { // exercises lcs.fix
 	a := "golang.org/x/tools/intern"
 	b := "github.com/google/safehtml/template\"\n\t\"golang.org/x/tools/intern"
-	diffs, lcs := compute(stringSeqs{a, b}, twosided, 4)
+	diffs, lcs := compute(stringSeqs{a, b}, twosided[stringSeqs], 4)
 	if !lcs.valid() {
 		t.Errorf("%d,%v", len(diffs), lcs)
 	}
@@ -75,7 +75,7 @@ func TestRegressionOld001(t *testing.T) {
 
 	b := "// Copyright 2019 The Go Authors. All rights reserved.\n// Use of this source code is governed by a BSD-style\n// license that can be found in the LICENSE file.\n\npackage diff_test\n\nimport (\n\t\"fmt\"\n\t\"math/rand\"\n\t\"strings\"\n\t\"testing\"\n\n\t\"github.com/google/safehtml/template\"\n\t\"golang.org/x/tools/gopls/internal/lsp/diff\"\n\t\"github.com/pgavlin/diff/difftest\"\n\t\"golang.org/x/tools/gopls/internal/span\"\n)\n"
 	for i := 1; i < len(b); i++ {
-		diffs, lcs := compute(stringSeqs{a, b}, twosided, i) // 14 from gopls
+		diffs, lcs := compute(stringSeqs{a, b}, twosided[stringSeqs], i) // 14 from gopls
 		if !lcs.valid() {
 			t.Errorf("%d,%v", len(diffs), lcs)
 		}
@@ -87,7 +87,7 @@ func TestRegressionOld002(t *testing.T) {
 	a := "n\"\n)\n"
 	b := "n\"\n\t\"golang.org/x//nnal/stack\"\n)\n"
 	for i := 1; i <= len(b); i++ {
-		diffs, lcs := compute(stringSeqs{a, b}, twosided, i)
+		diffs, lcs := compute(stringSeqs{a, b}, twosided[stringSeqs], i)
 		if !lcs.valid() {
 			t.Errorf("%d,%v", len(diffs), lcs)
 		}
@@ -99,7 +99,7 @@ func TestRegressionOld003(t *testing.T) {
 	a := "golang.org/x/hello v1.0.0\nrequire golang.org/x/unused v1"
 	b := "golang.org/x/hello v1"
 	for i := 1; i <= len(a); i++ {
-		diffs, lcs := compute(stringSeqs{a, b}, twosided, i)
+		diffs, lcs := compute(stringSeqs{a, b}, twosided[stringSeqs], i)
 		if !lcs.valid() {
 			t.Errorf("%d,%v", len(diffs), lcs)
 		}
@@ -117,9 +117,9 @@ func TestRandOld(t *testing.T) {
 		seq := runesSeqs{a, b}
 
 		const lim = 24 // large enough to get true lcs
-		_, forw := compute(seq, forward, lim)
-		_, back := compute(seq, backward, lim)
-		_, two := compute(seq, twosided, lim)
+		_, forw := compute(seq, forward[runesSeqs], lim)
+		_, back := compute(seq, backward[runesSeqs], lim)
+		_, two := compute(seq, twosided[runesSeqs], lim)
 		if lcslen(two) != lcslen(forw) || lcslen(forw) != lcslen(back) {
 			t.Logf("\n%v\n%v\n%v", forw, back, two)
 			t.Fatalf("%d forw:%d back:%d two:%d", i, lcslen(forw), lcslen(back), lcslen(two))
@@ -179,7 +179,7 @@ func BenchmarkTwoOld(b *testing.B) {
 	tests := genBench("abc", 96)
 	for i := 0; i < b.N; i++ {
 		for _, tt := range tests {
-			_, two := compute(stringSeqs{tt.before, tt.after}, twosided, 100)
+			_, two := compute(stringSeqs{tt.before, tt.after}, twosided[stringSeqs], 100)
 			if !two.valid() {
 				b.Error("check failed")
 			}
@@ -191,7 +191,7 @@ func BenchmarkForwOld(b *testing.B) {
 	tests := genBench("abc", 96)
 	for i := 0; i < b.N; i++ {
 		for _, tt := range tests {
-			_, two := compute(stringSeqs{tt.before, tt.after}, forward, 100)
+			_, two := compute(stringSeqs{tt.before, tt.after}, forward[stringSeqs], 100)
 			if !two.valid() {
 				b.Error("check failed")
 			}
@@ -247,7 +247,7 @@ func BenchmarkLargeFileSmallDiff(b *testing.B) {
 	dst := src[:n*49/100] + src[n*51/100:] // remove 2% from the middle
 	b.Run("string", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			compute(stringSeqs{src, dst}, twosided, len(src)+len(dst))
+			compute(stringSeqs{src, dst}, twosided[stringSeqs], len(src)+len(dst))
 		}
 	})
 
@@ -255,7 +255,7 @@ func BenchmarkLargeFileSmallDiff(b *testing.B) {
 	dstBytes := []byte(dst)
 	b.Run("bytes", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			compute(bytesSeqs{srcBytes, dstBytes}, twosided, len(srcBytes)+len(dstBytes))
+			compute(bytesSeqs{srcBytes, dstBytes}, twosided[bytesSeqs], len(srcBytes)+len(dstBytes))
 		}
 	})
 
@@ -275,7 +275,7 @@ func BenchmarkLargeFileSmallDiff(b *testing.B) {
 
 	b.Run("slices", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			compute(sliceSeqs[byte, []byte, []byte]{srcBytes, dstBytes}, twosided, len(srcBytes)+len(dstBytes))
+			compute(sliceSeqs[byte, []byte, []byte]{srcBytes, dstBytes}, twosided[sliceSeqs[byte, []byte, []byte]], len(srcBytes)+len(dstBytes))
 		}
 	})
 
@@ -289,7 +289,7 @@ func BenchmarkLargeFileSmallDiff(b *testing.B) {
 	dstRunes := []rune(dst)
 	b.Run("runes", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			compute(runesSeqs{srcRunes, dstRunes}, twosided, len(srcRunes)+len(dstRunes))
+			compute(runesSeqs{srcRunes, dstRunes}, twosided[runesSeqs], len(srcRunes)+len(dstRunes))
 		}
 	})
 }

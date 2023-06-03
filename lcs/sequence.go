@@ -23,8 +23,21 @@ type sequences interface {
 	commonSuffixLen(ai, aj, bi, bj int) int // len(commonSuffix(A[ai:aj], B[bi:bj]))
 }
 
-func textSeqs[S1, S2 text.String](a S1, b S2) sequences {
-	return stringSeqs{a: asString(a), b: asString(b)}
+//func textSeqs[S1, S2 text.String](a S1, b S2) sequences {
+//	return &stringSeqs{a: asString(a), b: asString(b)}
+//}
+
+type textSeqs[S1, S2 text.String] struct {
+	a S1
+	b S2
+}
+
+func (s *textSeqs[S1, S2]) lengths() (int, int) { return len(s.a), len(s.b) }
+func (s *textSeqs[S1, S2]) commonPrefixLen(ai, aj, bi, bj int) int {
+	return commonPrefixLenText(s.a[ai:aj], s.b[bi:bj])
+}
+func (s *textSeqs[S1, S2]) commonSuffixLen(ai, aj, bi, bj int) int {
+	return commonSuffixLenText(s.a[ai:aj], s.b[bi:bj])
 }
 
 type sliceSeqs[T comparable, S1 ~[]T, S2 ~[]T] struct {
@@ -32,11 +45,11 @@ type sliceSeqs[T comparable, S1 ~[]T, S2 ~[]T] struct {
 	b S2
 }
 
-func (s sliceSeqs[T, S1, S2]) lengths() (int, int) { return len(s.a), len(s.b) }
-func (s sliceSeqs[T, S1, S2]) commonPrefixLen(ai, aj, bi, bj int) int {
+func (s *sliceSeqs[T, S1, S2]) lengths() (int, int) { return len(s.a), len(s.b) }
+func (s *sliceSeqs[T, S1, S2]) commonPrefixLen(ai, aj, bi, bj int) int {
 	return commonPrefixLenSlices(s.a[ai:aj], s.b[bi:bj])
 }
-func (s sliceSeqs[T, S1, S2]) commonSuffixLen(ai, aj, bi, bj int) int {
+func (s *sliceSeqs[T, S1, S2]) commonSuffixLen(ai, aj, bi, bj int) int {
 	return commonSuffixLenSlices(s.a[ai:aj], s.b[bi:bj])
 }
 
@@ -46,11 +59,11 @@ type anySliceSeqs[T1, T2 any, S1 ~[]T1, S2 ~[]T2, C EqualsComparer[T1, T2]] stru
 	c C
 }
 
-func (s anySliceSeqs[T1, T2, S1, S2, C]) lengths() (int, int) { return len(s.a), len(s.b) }
-func (s anySliceSeqs[T1, T2, S1, S2, C]) commonPrefixLen(ai, aj, bi, bj int) int {
+func (s *anySliceSeqs[T1, T2, S1, S2, C]) lengths() (int, int) { return len(s.a), len(s.b) }
+func (s *anySliceSeqs[T1, T2, S1, S2, C]) commonPrefixLen(ai, aj, bi, bj int) int {
 	return commonPrefixLenAnySlices(s.a[ai:aj], s.b[bi:bj], s.c)
 }
-func (s anySliceSeqs[T1, T2, S1, S2, C]) commonSuffixLen(ai, aj, bi, bj int) int {
+func (s *anySliceSeqs[T1, T2, S1, S2, C]) commonSuffixLen(ai, aj, bi, bj int) int {
 	return commonSuffixLenAnySlices(s.a[ai:aj], s.b[bi:bj], s.c)
 }
 
@@ -59,21 +72,21 @@ type lineSeqs[S1, S2 text.String] struct {
 	b []S2
 }
 
-func (s lineSeqs[S1, S2]) lengths() (int, int) { return len(s.a), len(s.b) }
-func (s lineSeqs[S1, S2]) commonPrefixLen(ai, aj, bi, bj int) int {
+func (s *lineSeqs[S1, S2]) lengths() (int, int) { return len(s.a), len(s.b) }
+func (s *lineSeqs[S1, S2]) commonPrefixLen(ai, aj, bi, bj int) int {
 	return commonPrefixLenLines(s.a[ai:aj], s.b[bi:bj])
 }
-func (s lineSeqs[S1, S2]) commonSuffixLen(ai, aj, bi, bj int) int {
+func (s *lineSeqs[S1, S2]) commonSuffixLen(ai, aj, bi, bj int) int {
 	return commonSuffixLenLines(s.a[ai:aj], s.b[bi:bj])
 }
 
 type stringSeqs struct{ a, b string }
 
-func (s stringSeqs) lengths() (int, int) { return len(s.a), len(s.b) }
-func (s stringSeqs) commonPrefixLen(ai, aj, bi, bj int) int {
+func (s *stringSeqs) lengths() (int, int) { return len(s.a), len(s.b) }
+func (s *stringSeqs) commonPrefixLen(ai, aj, bi, bj int) int {
 	return commonPrefixLenString(s.a[ai:aj], s.b[bi:bj])
 }
-func (s stringSeqs) commonSuffixLen(ai, aj, bi, bj int) int {
+func (s *stringSeqs) commonSuffixLen(ai, aj, bi, bj int) int {
 	return commonSuffixLenString(s.a[ai:aj], s.b[bi:bj])
 }
 
@@ -81,21 +94,21 @@ func (s stringSeqs) commonSuffixLen(ai, aj, bi, bj int) int {
 
 type bytesSeqs struct{ a, b []byte }
 
-func (s bytesSeqs) lengths() (int, int) { return len(s.a), len(s.b) }
-func (s bytesSeqs) commonPrefixLen(ai, aj, bi, bj int) int {
+func (s *bytesSeqs) lengths() (int, int) { return len(s.a), len(s.b) }
+func (s *bytesSeqs) commonPrefixLen(ai, aj, bi, bj int) int {
 	return commonPrefixLenBytes(s.a[ai:aj:aj], s.b[bi:bj:bj])
 }
-func (s bytesSeqs) commonSuffixLen(ai, aj, bi, bj int) int {
+func (s *bytesSeqs) commonSuffixLen(ai, aj, bi, bj int) int {
 	return commonSuffixLenBytes(s.a[ai:aj:aj], s.b[bi:bj:bj])
 }
 
 type runesSeqs struct{ a, b []rune }
 
-func (s runesSeqs) lengths() (int, int) { return len(s.a), len(s.b) }
-func (s runesSeqs) commonPrefixLen(ai, aj, bi, bj int) int {
+func (s *runesSeqs) lengths() (int, int) { return len(s.a), len(s.b) }
+func (s *runesSeqs) commonPrefixLen(ai, aj, bi, bj int) int {
 	return commonPrefixLenRunes(s.a[ai:aj:aj], s.b[bi:bj:bj])
 }
-func (s runesSeqs) commonSuffixLen(ai, aj, bi, bj int) int {
+func (s *runesSeqs) commonSuffixLen(ai, aj, bi, bj int) int {
 	return commonSuffixLenRunes(s.a[ai:aj:aj], s.b[bi:bj:bj])
 }
 
@@ -124,6 +137,14 @@ func commonPrefixLenRunes(a, b []rune) int {
 	return i
 }
 func commonPrefixLenString(a, b string) int {
+	n := min(len(a), len(b))
+	i := 0
+	for i < n && a[i] == b[i] {
+		i++
+	}
+	return i
+}
+func commonPrefixLenText[S1, S2 text.String](a S1, b S2) int {
 	n := min(len(a), len(b))
 	i := 0
 	for i < n && a[i] == b[i] {
@@ -174,6 +195,14 @@ func commonSuffixLenRunes(a, b []rune) int {
 	return i
 }
 func commonSuffixLenString(a, b string) int {
+	n := min(len(a), len(b))
+	i := 0
+	for i < n && a[len(a)-1-i] == b[len(b)-1-i] {
+		i++
+	}
+	return i
+}
+func commonSuffixLenText[S1, S2 text.String](a S1, b S2) int {
 	n := min(len(a), len(b))
 	i := 0
 	for i < n && a[len(a)-1-i] == b[len(b)-1-i] {

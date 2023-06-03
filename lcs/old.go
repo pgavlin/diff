@@ -20,7 +20,7 @@ type Diff struct {
 
 // DiffSlices returns the difference between two slices.
 func DiffSlices[T comparable, S1 ~[]T, S2 ~[]T](a S1, b S2) []Diff {
-	return diff(sliceSeqs[T, S1, S2]{a, b})
+	return diff(&sliceSeqs[T, S1, S2]{a, b})
 }
 
 // EqualsComparer is an interface for equality-comparing types.
@@ -30,35 +30,35 @@ type EqualsComparer[T1, T2 any] interface {
 
 // DiffComparables returns the difference between two slices of comparable elements.
 func DiffAnySlices[T1, T2 any, S1 ~[]T1, S2 ~[]T2, C EqualsComparer[T1, T2]](a S1, b S2, c C) []Diff {
-	return diff(anySliceSeqs[T1, T2, S1, S2, C]{a, b, c})
+	return diff(&anySliceSeqs[T1, T2, S1, S2, C]{a, b, c})
 }
 
 // DiffText returns the differences between two texts.
 // It does not respect rune boundaries.
-func DiffText[S1, S2 text.String](a S1, b S2) []Diff { return diff(textSeqs(a, b)) }
+func DiffText[S1, S2 text.String](a S1, b S2) []Diff { return diff(&textSeqs[S1, S2]{a, b}) }
 
 // DiffLines returns the line differences between two texts.
-func DiffLines[S1, S2 text.String](a []S1, b []S2) []Diff { return diff(lineSeqs[S1, S2]{a, b}) }
+func DiffLines[S1, S2 text.String](a []S1, b []S2) []Diff { return diff(&lineSeqs[S1, S2]{a, b}) }
 
 // DiffRunes returns the differences between two rune sequences.
-func DiffRunes(a, b []rune) []Diff { return diff(runesSeqs{a, b}) }
+func DiffRunes(a, b []rune) []Diff { return diff(&runesSeqs{a, b}) }
 
-func diff(seqs sequences) []Diff {
+func diff[T sequences](seqs T) []Diff {
 	// A limit on how deeply the LCS algorithm should search. The value is just a guess.
 	const maxDiffs = 30
-	diff, _ := compute(seqs, twosided, maxDiffs/2)
+	diff, _ := compute(seqs, twosided[T], maxDiffs/2)
 	return diff
 }
 
 // compute computes the list of differences between two sequences,
 // along with the LCS. It is exercised directly by tests.
 // The algorithm is one of {forward, backward, twosided}.
-func compute(seqs sequences, algo func(*editGraph) lcs, limit int) ([]Diff, lcs) {
+func compute[T sequences](seqs T, algo func(*editGraph[T]) lcs, limit int) ([]Diff, lcs) {
 	if limit <= 0 {
 		limit = 1 << 25 // effectively infinity
 	}
 	alen, blen := seqs.lengths()
-	g := &editGraph{
+	g := &editGraph[T]{
 		seqs:  seqs,
 		vf:    newtriang(limit),
 		vb:    newtriang(limit),
@@ -73,8 +73,8 @@ func compute(seqs sequences, algo func(*editGraph) lcs, limit int) ([]Diff, lcs)
 }
 
 // editGraph carries the information for computing the lcs of two sequences.
-type editGraph struct {
-	seqs   sequences
+type editGraph[T sequences] struct {
+	seqs   T
 	vf, vb label // forward and backward labels
 
 	limit int // maximal value of D
@@ -104,7 +104,7 @@ func (lcs lcs) toDiffs(alen, blen int) []Diff {
 
 // fdone decides if the forwward path has reached the upper right
 // corner of the rectangle. If so, it also returns the computed lcs.
-func (e *editGraph) fdone(D, k int) (bool, lcs) {
+func (e *editGraph[T]) fdone(D, k int) (bool, lcs) {
 	// x, y, k are relative to the rectangle
 	x := e.vf.get(D, k)
 	y := x - k
@@ -115,7 +115,7 @@ func (e *editGraph) fdone(D, k int) (bool, lcs) {
 }
 
 // run the forward algorithm, until success or up to the limit on D.
-func forward(e *editGraph) lcs {
+func forward[T sequences](e *editGraph[T]) lcs {
 	e.setForward(0, 0, e.lx)
 	if ok, ans := e.fdone(0, 0); ok {
 		return ans
@@ -160,7 +160,7 @@ func forward(e *editGraph) lcs {
 }
 
 // recover the lcs by backtracking from the farthest point reached
-func (e *editGraph) forwardlcs(D, k int) lcs {
+func (e *editGraph[T]) forwardlcs(D, k int) lcs {
 	var ans lcs
 	for x := e.getForward(D, k); x != 0 || x-k != 0; {
 		if ok(D-1, k-1) && x-1 == e.getForward(D-1, k-1) {
@@ -182,7 +182,7 @@ func (e *editGraph) forwardlcs(D, k int) lcs {
 
 // start at (x,y), go up the diagonal as far as possible,
 // and label the result with d
-func (e *editGraph) lookForward(k, relx int) int {
+func (e *editGraph[T]) lookForward(k, relx int) int {
 	rely := relx - k
 	x, y := relx+e.lx, rely+e.ly
 	if x < e.ux && y < e.uy {
@@ -191,12 +191,12 @@ func (e *editGraph) lookForward(k, relx int) int {
 	return x
 }
 
-func (e *editGraph) setForward(d, k, relx int) {
+func (e *editGraph[T]) setForward(d, k, relx int) {
 	x := e.lookForward(k, relx)
 	e.vf.set(d, k, x-e.lx)
 }
 
-func (e *editGraph) getForward(d, k int) int {
+func (e *editGraph[T]) getForward(d, k int) int {
 	x := e.vf.get(d, k)
 	return x
 }
@@ -204,7 +204,7 @@ func (e *editGraph) getForward(d, k int) int {
 // --- BACKWARD ---
 
 // bdone decides if the backward path has reached the lower left corner
-func (e *editGraph) bdone(D, k int) (bool, lcs) {
+func (e *editGraph[T]) bdone(D, k int) (bool, lcs) {
 	// x, y, k are relative to the rectangle
 	x := e.vb.get(D, k)
 	y := x - (k + e.delta)
@@ -215,7 +215,7 @@ func (e *editGraph) bdone(D, k int) (bool, lcs) {
 }
 
 // run the backward algorithm, until success or up to the limit on D.
-func backward(e *editGraph) lcs {
+func backward[T sequences](e *editGraph[T]) lcs {
 	e.setBackward(0, 0, e.ux)
 	if ok, ans := e.bdone(0, 0); ok {
 		return ans
@@ -264,7 +264,7 @@ func backward(e *editGraph) lcs {
 }
 
 // recover the lcs by backtracking
-func (e *editGraph) backwardlcs(D, k int) lcs {
+func (e *editGraph[T]) backwardlcs(D, k int) lcs {
 	var ans lcs
 	for x := e.getBackward(D, k); x != e.ux || x-(k+e.delta) != e.uy; {
 		if ok(D-1, k-1) && x == e.getBackward(D-1, k-1) {
@@ -284,7 +284,7 @@ func (e *editGraph) backwardlcs(D, k int) lcs {
 }
 
 // start at (x,y), go down the diagonal as far as possible,
-func (e *editGraph) lookBackward(k, relx int) int {
+func (e *editGraph[T]) lookBackward(k, relx int) int {
 	rely := relx - (k + e.delta) // forward k = k + e.delta
 	x, y := relx+e.lx, rely+e.ly
 	if x > 0 && y > 0 {
@@ -294,19 +294,19 @@ func (e *editGraph) lookBackward(k, relx int) int {
 }
 
 // convert to rectangle, and label the result with d
-func (e *editGraph) setBackward(d, k, relx int) {
+func (e *editGraph[T]) setBackward(d, k, relx int) {
 	x := e.lookBackward(k, relx)
 	e.vb.set(d, k, x-e.lx)
 }
 
-func (e *editGraph) getBackward(d, k int) int {
+func (e *editGraph[T]) getBackward(d, k int) int {
 	x := e.vb.get(d, k)
 	return x
 }
 
 // -- TWOSIDED ---
 
-func twosided(e *editGraph) lcs {
+func twosided[T sequences](e *editGraph[T]) lcs {
 	// The termination condition could be improved, as either the forward
 	// or backward pass could succeed before Myers' Lemma applies.
 	// Aside from questions of efficiency (is the extra testing cost-effective)
@@ -388,7 +388,7 @@ func twosided(e *editGraph) lcs {
 }
 
 // Does Myers' Lemma apply?
-func (e *editGraph) twoDone(df, db int) (int, bool) {
+func (e *editGraph[T]) twoDone(df, db int) (int, bool) {
 	if (df+db+e.delta)%2 != 0 {
 		return 0, false // diagonals cannot overlap
 	}
@@ -420,7 +420,7 @@ func (e *editGraph) twoDone(df, db int) (int, bool) {
 	return 0, false
 }
 
-func (e *editGraph) twolcs(df, db, kf int) lcs {
+func (e *editGraph[T]) twolcs(df, db, kf int) lcs {
 	// db==df || db+1==df
 	x := e.vf.get(df, kf)
 	y := x - kf
